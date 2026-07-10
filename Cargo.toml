@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "filly-protocol",
+    "filly-core",
+    "filly-terminal",
+    "filly-daemon",
+    "filly-bin",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Forge Attribution License 1.0"

@@ -1,0 +1,10 @@
+{
+    "name": "Forge",
+    "colors": {},
+    "styles": {
+        "title": {"fg": "#ff87af", "bold": true},
+        "body": {"fg": "#ffffff"},
+        "highlight": {"fg": "#afd700", "bg": "#444444"},
+        "muted": {"fg": "#888888"}
+    }
+}

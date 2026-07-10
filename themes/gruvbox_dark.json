@@ -1,0 +1,10 @@
+{
+    "name": "Gruvbox Dark",
+    "colors": {},
+    "styles": {
+        "title": {"fg": "#fabd2f", "bold": true},
+        "body": {"fg": "#ebdbb2"},
+        "highlight": {"fg": "#b8bb26", "bg": "#504945"},
+        "muted": {"fg": "#a89984"}
+    }
+}

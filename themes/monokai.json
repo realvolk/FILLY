@@ -1,0 +1,10 @@
+{
+    "name": "Monokai",
+    "colors": {},
+    "styles": {
+        "title": {"fg": "#a6e22e", "bold": true},
+        "body": {"fg": "#f8f8f2"},
+        "highlight": {"fg": "#f92672", "bg": "#49483e"},
+        "muted": {"fg": "#75715e"}
+    }
+}

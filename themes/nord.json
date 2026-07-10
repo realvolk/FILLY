@@ -1,0 +1,10 @@
+{
+    "name": "Nord",
+    "colors": {},
+    "styles": {
+        "title": {"fg": "#88c0d0", "bold": true},
+        "body": {"fg": "#d8dee9"},
+        "highlight": {"fg": "#a3be8c", "bg": "#4c566a"},
+        "muted": {"fg": "#616e88"}
+    }
+}

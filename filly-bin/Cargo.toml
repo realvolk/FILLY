@@ -1,0 +1,15 @@
+[package]
+name = "filly"
+version = "0.1.0"
+edition = "2021"
+description = "FILLY CLI entry point"
+
+[dependencies]
+filly-core = { path = "../filly-core" }
+filly-protocol = { path = "../filly-protocol" }
+filly-terminal = { path = "../filly-terminal" }
+filly-daemon = { path = "../filly-daemon" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+crossterm = "0.27"

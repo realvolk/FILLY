@@ -1,0 +1,10 @@
+{
+    "name": "Catppuccin Mocha",
+    "colors": {},
+    "styles": {
+        "title": {"fg": "#cba6f7", "bold": true},
+        "body": {"fg": "#cdd6f4"},
+        "highlight": {"fg": "#a6e3a1", "bg": "#45475a"},
+        "muted": {"fg": "#6c7086"}
+    }
+}
