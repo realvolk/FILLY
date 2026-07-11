@@ -2,52 +2,20 @@
 set -Eeuo pipefail
 
 FILLY_BIN="${FILLY_BIN:-filly}"
-FILLY_SOCKET="${FILLY_SOCKET:-/tmp/filly.sock}"
-FILLY_DAEMON="${FILLY_DAEMON:-}"
-
-_start_daemon() {
-    if [[ -n "${FILLY_DAEMON:-}" ]]; then
-        if [[ ! -S "${FILLY_SOCKET}" ]]; then
-            "${FILLY_BIN}" daemon --socket "${FILLY_SOCKET}" 2>/tmp/filly-daemon-stderr.log &
-            for _ in {1..50}; do
-                [[ -S "${FILLY_SOCKET}" ]] && break
-                sleep 0.05
-            done
-        fi
-        return 0
-    fi
-    return 1
-}
 
 _filly_send() {
-    echo "DEBUG _filly_send: FILLY_DAEMON=${FILLY_DAEMON:-unset}" >> /tmp/filly-debug.log
-    echo "DEBUG _filly_send: input=$1" >> /tmp/filly-debug.log
-    if _start_daemon; then
-        echo "DEBUG _filly_send: using daemon" >> /tmp/filly-debug.log
-        local result
-        result=$(printf '%s\n' "$1" | nc -U "${FILLY_SOCKET}" 2>/dev/null) || true
-        echo "DEBUG _filly_send: daemon result=$result" >> /tmp/filly-debug.log
-        printf '%s\n' "$result"
-    else
-        echo "DEBUG _filly_send: using oneshot" >> /tmp/filly-debug.log
-        local tmp
-        tmp=$(mktemp)
-        printf '%s\n' "$1" > "$tmp"
-        local result
-        result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null) || true
-        echo "DEBUG _filly_send: oneshot result=$result" >> /tmp/filly-debug.log
-        rm -f "$tmp"
-        printf '%s\n' "$result"
-    fi
+    local tmp
+    tmp=$(mktemp)
+    printf '%s\n' "$1" > "$tmp"
+    local result
+    result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null) || true
+    rm -f "$tmp"
+    printf '%s\n' "$result"
 }
 
 _filly_result() {
-    local tmp_out
-    tmp_out=$(mktemp)
-    _filly_send "$1" > "$tmp_out"
     local resp
-    resp=$(cat "$tmp_out")
-    rm -f "$tmp_out"
+    resp=$(_filly_send "$1")
     [[ -z "$resp" ]] && return 1
     [[ "$(jq -r '.cancelled' <<< "$resp")" == "true" ]] && return 1
     jq -r '.result // empty' <<< "$resp"
