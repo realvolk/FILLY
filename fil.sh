@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-FILLY_BIN="${FILLY_BIN:-./target/release/filly}"
+FILLY_BIN="${FILLY_BIN:-filly}"
 FILLY_SOCKET="${FILLY_SOCKET:-/tmp/filly.sock}"
 FILLY_DAEMON="${FILLY_DAEMON:-}"
 
