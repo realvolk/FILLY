@@ -212,3 +212,38 @@ filly_tooltip() {
     local text="$1"
     _filly_oneshot '{"widget":"tooltip","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
 }
+
+filly_disk() {
+    local title="$1" disk="$2" partitions_json="${3:-[]}" free_space_json="${4:-[]}" readonly="${5:-false}"
+    _filly_result '{"widget":"disk","params":{"title":"'"${title//\"/\\\"}"'","disk":"'"${disk}"'","partitions":'"${partitions_json}"',"free_space":'"${free_space_json}"',"readonly":'"${readonly}"'}}'
+}
+
+filly_install_hub() {
+    local title="$1" categories_json="$2" actions_json="$3" boot_mode="${4:-uefi}"
+    _filly_result '{"widget":"install_hub","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"',"actions":'"$actions_json"',"boot_mode":"'"${boot_mode}"'"}}'
+}
+
+filly_recovery() {
+    local title="$1" status_json="$2" repairs_json="$3"
+    _filly_result '{"widget":"recovery","params":{"title":"'"${title//\"/\\\"}"'","status":'"$status_json"',"repairs":'"$repairs_json"'}}'
+}
+
+filly_iso() {
+    local title="$1" categories_json="$2"
+    _filly_result '{"widget":"iso","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"'}}'
+}
+
+filly_migration_init() {
+    local title="$1" current_init="$2"
+    _filly_result '{"widget":"migration_init","params":{"title":"'"${title//\"/\\\"}"'","current_init":"'"${current_init}"'"}}'
+}
+
+filly_migration_desktop() {
+    local title="$1" current_de="$2"
+    _filly_result '{"widget":"migration_desktop","params":{"title":"'"${title//\"/\\\"}"'","current_de":"'"${current_de}"'"}}'
+}
+
+filly_poweruser() {
+    local title="$1" categories_json="$2"
+    _filly_result '{"widget":"poweruser","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"'}}'
+}

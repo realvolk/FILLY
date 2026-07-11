@@ -5,9 +5,11 @@ members = [
     "filly-terminal",
     "filly-daemon",
     "filly-bin",
+    "plugins/artixforge",
+    "plugins/gforge",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Forge Attribution License 1.0"

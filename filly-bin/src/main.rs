@@ -58,6 +58,24 @@ fn main() {
     if let Err(e) = result { eprintln!("Error: {}", e); std::process::exit(1); }
 }
 
+fn load_plugins() {
+    if let Some(home) = dirs::home_dir() {
+        let plugin_dir = home.join(".config/filly/plugins");
+        if plugin_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&plugin_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |ext| ext == "so") {
+                        if let Err(e) = filly_core::widgets::REGISTRY.lock().unwrap().load_plugin(&path) {
+                            eprintln!("Failed to load plugin {:?}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn load_theme(name: &Option<String>) -> Theme {
     match name {
         Some(n) => {
@@ -76,6 +94,7 @@ fn run_app() -> Result<()> {
             filly_daemon::run(UnixListener::bind(&socket)?, load_theme(&theme))?;
         }
         Some(Command::Oneshot { input, output, theme }) => {
+            load_plugins();
             let theme = load_theme(&theme);
             let data = if let Some(path) = input { fs::read_to_string(&path)? }
             else { let stdin = io::stdin(); if stdin.is_terminal() { String::new() } else { let mut s = String::new(); stdin.lock().read_to_string(&mut s)?; s } };
@@ -92,6 +111,7 @@ fn run_app() -> Result<()> {
             if let Some(path) = output { fs::write(path, json + "\n")?; } else { println!("{}", json); }
         }
         Some(Command::Batch { input }) => {
+            load_plugins();
             let path = input.unwrap_or_else(|| "/dev/stdin".into());
             let content = fs::read_to_string(&path)?;
             let mut out = io::stdout();
@@ -114,6 +134,7 @@ fn run_app() -> Result<()> {
             }
         }
         Some(Command::Validate { input }) => {
+            load_plugins();
             let data = fs::read_to_string(&input)?;
             let req: WidgetRequest = serde_json::from_str(&data)?;
             if filly_core::widgets::create_widget(&req, &Store::new(), &Theme::default()).is_some() {
@@ -144,32 +165,19 @@ fn run_demo(theme: &Theme) -> Result<()> {
     let mut backend = TerminalBackend::new()?;
     backend.setup()?;
 
-    // 1  msg
     filly_core::session::run(filly_core::widgets::msg::MsgWidget::new("FILLY Demo".into(), "Welcome! Press any key.".into()), &mut backend, None)?;
-    // 2  yesno
     filly_core::session::run(filly_core::widgets::yesno::YesNoWidget::new("Yes/No".into(), "Is FILLY working?".into(), Some(true)), &mut backend, None)?;
-    // 3  menu
     filly_core::session::run(filly_core::widgets::menu::MenuWidget::new("Menu".into(), "Choose desktop:".into(), vec!["KDE".into(),"XFCE".into(),"Sway".into(),"Hyprland".into(),"i3".into()], Some(0)), &mut backend, None)?;
-    // 4  input
     filly_core::session::run(filly_core::widgets::input::InputWidget::new("Input".into(), "Username:".into(), Some("artix".into()), Some("username".into()), None), &mut backend, None)?;
-    // 5  password
     filly_core::session::run(filly_core::widgets::password::PasswordWidget::new("Password".into(), "Secret:".into(), Some("password".into())), &mut backend, None)?;
-    // 6  checklist
     filly_core::session::run(filly_core::widgets::checklist::ChecklistWidget::new("Checklist".into(), "Select packages:".into(), vec!["git".into(),"neovim".into(),"firefox".into(),"alacritty".into(),"tmux".into()], Some(0), Some(5), vec!["git".into(),"neovim".into()]), &mut backend, None)?;
-    // 7  filter
     filly_core::session::run(filly_core::widgets::filter::FilterWidget::new("Filter".into(), "Search timezones:".into(), vec!["Europe/London".into(),"Europe/Belgrade".into(),"America/New_York".into(),"Asia/Tokyo".into(),"Australia/Sydney".into()], Some("Type to filter...".into())), &mut backend, None)?;
-    // 8  multiselect
     filly_core::session::run(filly_core::widgets::multiselect::MultiselectWidget::new("Multiselect".into(), "Select packages:".into(), vec!["git".into(),"neovim".into(),"firefox".into(),"alacritty".into(),"tmux".into(),"docker".into(),"podman".into()], Some("Search...".into()), Some(0), Some(7)), &mut backend, None)?;
-    // 9  summary
     filly_core::session::run(filly_core::widgets::summary::SummaryWidget::new("Summary".into(), Some("Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10".into()), None), &mut backend, None)?;
-    // 10 file_picker
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
     filly_core::session::run(filly_core::widgets::file_picker::FilePickerWidget::new("File Picker".into(), Some(home), None), &mut backend, None)?;
-    // 11 text editor
     filly_core::session::run(filly_core::widgets::text::TextEditorWidget::new("Text Editor".into(), None, Some("Edit me.\nLine 2\nLine 3".into())), &mut backend, None)?;
-    // 12 toggle
     filly_core::session::run(filly_core::widgets::toggle::ToggleWidget::new("Toggle".into(), "Enable feature?".into(), Some(false)), &mut backend, None)?;
-    // 13 hub
     let categories = serde_json::json!([
         {"label":"System","summary_template":"Host: {HOSTNAME}","items":[
             {"id":"HOSTNAME","label":"Hostname","value":"artix","widget":"input","choices":[],"placeholder":"","visible_if":{},"display":""},
@@ -183,9 +191,7 @@ fn run_demo(theme: &Theme) -> Result<()> {
     let store = Store::new();
     let hub = filly_core::widgets::create_widget(&hub_req, &store, theme).unwrap();
     filly_core::session::run(hub, &mut backend, None)?;
-    // 14 table
     filly_core::session::run(filly_core::widgets::table::TableWidget::new("Table".into(), vec!["Name".into(),"Size".into(),"Type".into()], vec![vec!["firefox".into(),"120MB".into(),"browser".into()], vec!["neovim".into(),"8MB".into(),"editor".into()], vec!["htop".into(),"2MB".into(),"monitor".into()]]), &mut backend, None)?;
-    // 15 tree
     let tree_nodes = vec![
         TreeNode { label: "src".into(), expanded: true, children: vec![
             TreeNode { label: "main.rs".into(), expanded: false, children: vec![] },
@@ -194,38 +200,27 @@ fn run_demo(theme: &Theme) -> Result<()> {
         TreeNode { label: "Cargo.toml".into(), expanded: false, children: vec![] },
     ];
     filly_core::session::run(filly_core::widgets::tree::TreeWidget::new("Tree".into(), tree_nodes), &mut backend, None)?;
-    // 16 gauge
     filly_core::session::run(filly_core::widgets::gauge::GaugeWidget::new("Gauge".into(), 73, "Progress".into()), &mut backend, None)?;
-    // 17 calendar
     filly_core::session::run(filly_core::widgets::calendar::CalendarWidget::new("Calendar".into()), &mut backend, None)?;
-    // 18 form
     let form_fields = vec![
         FormField { label: "Name".into(), widget_type: "input".into(), value: "".into(), choices: vec![], placeholder: "Enter name".into() },
         FormField { label: "OS".into(), widget_type: "menu".into(), value: "Artix".into(), choices: vec!["Artix".into(),"Arch".into(),"Debian".into()], placeholder: "".into() },
         FormField { label: "Enable".into(), widget_type: "toggle".into(), value: "yes".into(), choices: vec![], placeholder: "".into() },
     ];
     filly_core::session::run(filly_core::widgets::form::FormWidget::new("Form".into(), form_fields, "Submit".into()), &mut backend, None)?;
-    // 19 tabs
     let tab_widgets: Vec<Box<dyn filly_core::Widget>> = vec![
         Box::new(filly_core::widgets::msg::MsgWidget::new("Tab 1".into(), "First tab content".into())),
         Box::new(filly_core::widgets::msg::MsgWidget::new("Tab 2".into(), "Second tab content".into())),
     ];
     filly_core::session::run(filly_core::widgets::tabs::TabsWidget::new("Tabs".into(), vec!["One".into(),"Two".into()], tab_widgets), &mut backend, None)?;
-    // 20 split panes
     let left = filly_core::widgets::msg::MsgWidget::new("Left".into(), "LEFT PANE - press F2 to switch".into());
     let right = filly_core::widgets::msg::MsgWidget::new("Right".into(), "RIGHT PANE".into());
     filly_core::session::run(filly_core::widgets::split_panes::SplitPanesWidget::new(Orientation::Horizontal, Box::new(left), Box::new(right)), &mut backend, None)?;
-    // 21 context menu
     filly_core::session::run(filly_core::widgets::context_menu::ContextMenuWidget::new(vec!["Copy".into(),"Paste".into(),"Delete".into()]), &mut backend, None)?;
-    // 22 notification
     filly_core::session::run(filly_core::widgets::notification::NotificationWidget::new("Toast notification".into(), 2), &mut backend, None)?;
-    // 23 radio group
     filly_core::session::run(filly_core::widgets::radio_group::RadioGroupWidget::new("Radio".into(), "Pick one:".into(), vec!["A".into(),"B".into(),"C".into()], Some(0)), &mut backend, None)?;
-    // 24 range slider
     filly_core::session::run(filly_core::widgets::range_slider::RangeSliderWidget::new("Range Slider".into(), 0, 100, 50, "Volume".into()), &mut backend, None)?;
-    // 25 color picker
     filly_core::session::run(filly_core::widgets::color_picker::ColorPickerWidget::new("Color Picker".into(), vec!["red".into(),"green".into(),"blue".into(),"yellow".into(),"magenta".into(),"cyan".into(),"white".into(),"black".into()]), &mut backend, None)?;
-    // 26 done
     filly_core::session::run(filly_core::widgets::msg::MsgWidget::new("Done".into(), "All widgets demonstrated.\n\nFILLY is operational.".into()), &mut backend, None)?;
 
     backend.teardown()?;

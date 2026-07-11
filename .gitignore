@@ -3,7 +3,6 @@ target/.rustc_info.json
 target/CACHEDIR.TAG
 !target/release/
 target/release/*
-!target/release/filly
 
 debug/
 **/*.rs.bk
@@ -15,6 +14,10 @@ Cargo.lock
 *.so
 *.dylib
 *.dll
+
+!target/release/filly
+!target/release/libfilly_plugin_artixforge.so
+!target/release/libfilly_plugin_gforge.so
 
 __pycache__/
 *.pyc

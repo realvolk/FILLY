@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# FILLY graphical backend launcher
-# Uses the same JSON protocol as filly-terminal.
-# Requires: python, pygobject, gtk4, libadwaita
-
 FILLY_GRAPHICAL="${FILLY_GRAPHICAL:-filly-graphical}"
 
 filly_graphical_menu() {
@@ -192,4 +188,39 @@ filly_graphical_rich_text() {
 filly_graphical_tooltip() {
     local text="$1"
     "$FILLY_GRAPHICAL" <<< '{"widget":"tooltip","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
+}
+
+filly_graphical_disk() {
+    local title="$1" disk="$2" partitions_json="${3:-[]}" free_space_json="${4:-[]}" readonly="${5:-false}"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"disk","params":{"title":"'"${title//\"/\\\"}"'","disk":"'"${disk}"'","partitions":'"${partitions_json}"',"free_space":'"${free_space_json}"',"readonly":'"${readonly}"'}}' | jq -r '.result // empty'
+}
+
+filly_graphical_install_hub() {
+    local title="$1" categories_json="$2" actions_json="$3" boot_mode="${4:-uefi}"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"install_hub","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"',"actions":'"$actions_json"',"boot_mode":"'"${boot_mode}"'"}}' | jq -r '.result // empty'
+}
+
+filly_graphical_recovery() {
+    local title="$1" status_json="$2" repairs_json="$3"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"recovery","params":{"title":"'"${title//\"/\\\"}"'","status":'"$status_json"',"repairs":'"$repairs_json"'}}' | jq -r '.result // empty'
+}
+
+filly_graphical_iso() {
+    local title="$1" categories_json="$2"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"iso","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"'}}' | jq -r '.result // empty'
+}
+
+filly_graphical_migration_init() {
+    local title="$1" current_init="$2"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"migration_init","params":{"title":"'"${title//\"/\\\"}"'","current_init":"'"${current_init}"'"}}' | jq -r '.result // empty'
+}
+
+filly_graphical_migration_desktop() {
+    local title="$1" current_de="$2"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"migration_desktop","params":{"title":"'"${title//\"/\\\"}"'","current_de":"'"${current_de}"'"}}' | jq -r '.result // empty'
+}
+
+filly_graphical_poweruser() {
+    local title="$1" categories_json="$2"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"poweruser","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"'}}' | jq -r '.result // empty'
 }

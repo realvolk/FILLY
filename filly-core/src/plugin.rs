@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use libloading::{Library, Symbol};
 
-pub type WidgetFactory = fn(&WidgetRequest, &Store, &Theme) -> Box<dyn Widget>;
+pub type WidgetFactory = Box<dyn Fn(&WidgetRequest, &Store, &Theme) -> Box<dyn Widget> + Send + Sync>;
 
 pub struct PluginRegistry {
     factories: HashMap<String, WidgetFactory>,
@@ -21,8 +21,12 @@ impl PluginRegistry {
         }
     }
 
-    pub fn register(&mut self, widget_type: &str, factory: WidgetFactory) {
-        self.factories.insert(widget_type.to_string(), factory);
+    pub fn register(
+        &mut self,
+        widget_type: &str,
+        factory: impl Fn(&WidgetRequest, &Store, &Theme) -> Box<dyn Widget> + Send + Sync + 'static,
+    ) {
+        self.factories.insert(widget_type.to_string(), Box::new(factory));
     }
 
     pub fn load_plugin(&mut self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {

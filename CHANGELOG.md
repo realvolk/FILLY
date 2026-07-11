@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.1 (2026-07-11) — FILLY
+
+### Added
+- Plugin auto-loading in `filly oneshot` and `filly batch` modes (previously daemon-only)
+- GUI plugin discovery system in `backend.py` — scans `plugins/*/python/` and `~/.config/filly/gui-plugins/` for `register()` hooks
+- `GuiBackend.register_widget()` classmethod for external widget registration
+- ArtixForge and GForge plugin crates added to workspace members
+- Python GUI plugin packs: ArtixForge (6 hub widgets → `HubWindow`) and GForge (5 custom widgets + 11 portage widgets → built-in FILLY widgets)
+- GForge GUI widgets: `stage3_picker`, `profile_picker`, `kernel_picker`, `use_flags`, `cflags`
+
+### Changed
+- `WidgetFactory` type changed from `fn` pointer to `Box<dyn Fn>` for closure support
+- `PluginRegistry::register` now accepts generic `impl Fn` instead of requiring function pointers
+- Daemon's `handle_client` uses immutable store binding to fix unused-mut warning
+
 ## v0.1.0 (2026-07-10) — FILLY
 
 Initial release of the Forge Interface Linux Library.

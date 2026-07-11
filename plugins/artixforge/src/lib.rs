@@ -163,7 +163,6 @@ struct InstallHubWidget {
     title: String,
     categories: Value,
     actions: Vec<String>,
-    selected: usize,
     dirty: bool,
 }
 
@@ -661,7 +660,7 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
             for cat_val in arr {
                 let cat_name = cat_val.get("category").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let mut actions = Vec::new();
-                if let Some(items) = cat_val.get("actions").as_array() {
+                if let Some(items) = cat_val.get("actions").and_then(|v| v.as_array()) {
                     for item in items {
                         let key = item.get("key").and_then(|v| v.as_str()).unwrap_or("").to_string();
                         let desc = item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -680,7 +679,7 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
         let categories = p.get("categories").cloned().unwrap_or(Value::Null);
         let actions: Vec<String> = p.get("actions").and_then(|v| v.as_array())
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
-        Box::new(InstallHubWidget { title, categories, actions, selected: 0, dirty: true })
+        Box::new(InstallHubWidget { title, categories, actions, dirty: true })
     });
 
     registry.register("poweruser", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
@@ -691,7 +690,7 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
             for cat_val in arr {
                 let cat_name = cat_val.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let mut items = Vec::new();
-                if let Some(items_arr) = cat_val.get("items").as_array() {
+                if let Some(items_arr) = cat_val.get("items").and_then(|v| v.as_array()) {
                     for item in items_arr {
                         let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
                         let value = item.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -735,7 +734,7 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
             for cat_val in arr {
                 let cat_name = cat_val.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let mut items = Vec::new();
-                if let Some(items_arr) = cat_val.get("items").as_array() {
+                if let Some(items_arr) = cat_val.get("items").and_then(|v| v.as_array()) {
                     for item in items_arr {
                         let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
                         let value = item.get("value").and_then(|v| v.as_str()).unwrap_or("").to_string();

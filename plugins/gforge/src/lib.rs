@@ -469,21 +469,38 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
         Box::new(CflagsWidget { title, cflags, cxxflags, makeopts, rustflags, field: 0, dirty: true })
     });
 
-    let check_register = |name: &str, default_choices: Vec<&str>| {
-        registry.register(name, move |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
-            let p = &req.params;
-            let title = p.get("title").and_then(|v| v.as_str()).unwrap_or(name).to_string();
-            let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
-            Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
-        });
-    };
+    registry.register("portage_licenses", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("portage_licenses").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_choices = vec!["@FREE", "@BINARY-REDISTRIBUTABLE", "@EULA", "GPL-2", "GPL-3", "LGPL-2.1", "BSD", "MIT", "Apache-2.0"];
+        let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
+        Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
+    });
 
-    check_register("portage_licenses", vec!["@FREE", "@BINARY-REDISTRIBUTABLE", "@EULA", "GPL-2", "GPL-3", "LGPL-2.1", "BSD", "MIT", "Apache-2.0"]);
-    check_register("portage_features", vec!["ccache", "buildpkg", "parallel-install", "keep-going", "userpriv", "quiet-build", "getbinpkg"]);
-    check_register("portage_overlays", vec!["gentoo", "guru", "pentoo", "science"]);
+    registry.register("portage_features", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("portage_features").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_choices = vec!["ccache", "buildpkg", "parallel-install", "keep-going", "userpriv", "quiet-build", "getbinpkg"];
+        let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
+        Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
+    });
+
+    registry.register("portage_overlays", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("portage_overlays").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_choices = vec!["gentoo", "guru", "pentoo", "science"];
+        let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
+        Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
+    });
 
     registry.register("portage_mirrors", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
         let p = &req.params;
@@ -535,6 +552,25 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
         Box::new(filly_core::widgets::yesno::YesNoWidget::new(title, message, default))
     });
 
-    check_register("portage_desktop_extras", vec!["Vulkan drivers", "Printer support", "Bluetooth", "Power management", "SSD TRIM", "NetworkManager applet", "Fonts", "Input method"]);
-    check_register("portage_tool_groups", vec!["Virtualization", "Containers", "Development", "Gaming"]);
+    registry.register("portage_desktop_extras", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("portage_desktop_extras").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_choices = vec!["Vulkan drivers", "Printer support", "Bluetooth", "Power management", "SSD TRIM", "NetworkManager applet", "Fonts", "Input method"];
+        let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
+        Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
+    });
+
+    registry.register("portage_tool_groups", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("portage_tool_groups").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_choices = vec!["Virtualization", "Containers", "Development", "Gaming"];
+        let choices: Vec<String> = p.get("choices").and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| default_choices.iter().map(|s| s.to_string()).collect());
+        Box::new(CheckListWidget { title, message, choices, selected: HashSet::new(), cursor: 0, min: 0, max: usize::MAX, dirty: true })
+    });
 }
