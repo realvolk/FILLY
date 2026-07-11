@@ -2,20 +2,40 @@
 set -Eeuo pipefail
 
 FILLY_BIN="${FILLY_BIN:-./target/release/filly}"
+FILLY_SOCKET="${FILLY_SOCKET:-/tmp/filly.sock}"
+FILLY_DAEMON="${FILLY_DAEMON:-}"
 
-_filly_oneshot() {
-    local tmp
-    tmp=$(mktemp)
-    printf '%s\n' "$1" > "$tmp"
-    local result
-    result=$($FILLY_BIN oneshot --input "$tmp" 2>/dev/null) || true
-    rm -f "$tmp"
-    printf '%s\n' "$result"
+_start_daemon() {
+    if [[ -n "${FILLY_DAEMON:-}" ]]; then
+        if [[ ! -S "${FILLY_SOCKET}" ]]; then
+            "${FILLY_BIN}" daemon --socket "${FILLY_SOCKET}" 2>/tmp/filly-daemon-stderr.log &
+            for _ in {1..50}; do
+                [[ -S "${FILLY_SOCKET}" ]] && break
+                sleep 0.05
+            done
+        fi
+        return 0
+    fi
+    return 1
+}
+
+_filly_send() {
+    if _start_daemon; then
+        printf '%s\n' "$1" | nc -U "${FILLY_SOCKET}" 2>/dev/null
+    else
+        local tmp
+        tmp=$(mktemp)
+        printf '%s\n' "$1" > "$tmp"
+        local result
+        result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null) || true
+        rm -f "$tmp"
+        printf '%s\n' "$result"
+    fi
 }
 
 _filly_result() {
     local resp
-    resp=$(_filly_oneshot "$1")
+    resp=$(_filly_send "$1")
     [[ -z "$resp" ]] && return 1
     [[ "$(jq -r '.cancelled' <<< "$resp")" == "true" ]] && return 1
     jq -r '.result // empty' <<< "$resp"
@@ -54,7 +74,7 @@ filly_checklist() {
 
 filly_msg() {
     local title="$1" message="$2"
-    _filly_oneshot '{"widget":"msg","params":{"title":"'"${title//\"/\\\"}"'","message":"'"${message//\"/\\\"}"'"}}' >/dev/null
+    _filly_send '{"widget":"msg","params":{"title":"'"${title//\"/\\\"}"'","message":"'"${message//\"/\\\"}"'"}}' >/dev/null
 }
 
 filly_progress() {
@@ -91,7 +111,7 @@ filly_summary() {
     local params='"title":"'"${title//\"/\\\"}"'"'
     [[ -n "$file" ]] && params+=',"file":"'"${file}"'"'
     [[ -n "$message" ]] && params+=',"message":"'"${message//\"/\\\"}"'"'
-    _filly_oneshot '{"widget":"summary","params":{'"$params"'}}' >/dev/null
+    _filly_send '{"widget":"summary","params":{'"$params"'}}' >/dev/null
 }
 
 filly_text_editor() {
@@ -114,12 +134,12 @@ filly_toggle() {
 
 filly_spinner() {
     local message="$1"
-    _filly_oneshot '{"widget":"spinner","params":{"message":"'"${message//\"/\\\"}"'"}}' >/dev/null
+    _filly_send '{"widget":"spinner","params":{"message":"'"${message//\"/\\\"}"'"}}' >/dev/null
 }
 
 filly_separator() {
     local orientation="${1:-horizontal}"
-    _filly_oneshot '{"widget":"separator","params":{"orientation":"'"${orientation}"'"}}' >/dev/null
+    _filly_send '{"widget":"separator","params":{"orientation":"'"${orientation}"'"}}' >/dev/null
 }
 
 filly_table() {
@@ -156,12 +176,12 @@ filly_tabs() {
     shift
     local tabs_json
     tabs_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
-    _filly_oneshot '{"widget":"tabs","params":{"title":"'"${title//\"/\\\"}"'","tabs":'"$tabs_json"'}}' >/dev/null
+    _filly_send '{"widget":"tabs","params":{"title":"'"${title//\"/\\\"}"'","tabs":'"$tabs_json"'}}' >/dev/null
 }
 
 filly_split_panes() {
     local orientation="${1:-horizontal}"
-    _filly_oneshot '{"widget":"split_panes","params":{"orientation":"'"${orientation}"'"}}' >/dev/null
+    _filly_send '{"widget":"split_panes","params":{"orientation":"'"${orientation}"'"}}' >/dev/null
 }
 
 filly_context_menu() {
@@ -174,7 +194,7 @@ filly_context_menu() {
 
 filly_notification() {
     local message="$1" duration="${2:-3}"
-    _filly_oneshot '{"widget":"notification","params":{"message":"'"${message//\"/\\\"}"'","duration":'"$duration"'}}' >/dev/null
+    _filly_send '{"widget":"notification","params":{"message":"'"${message//\"/\\\"}"'","duration":'"$duration"'}}' >/dev/null
 }
 
 filly_radio_group() {
@@ -200,17 +220,17 @@ filly_color_picker() {
 
 filly_badge() {
     local text="$1"
-    _filly_oneshot '{"widget":"badge","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
+    _filly_send '{"widget":"badge","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
 }
 
 filly_rich_text() {
     local content="$1"
-    _filly_oneshot '{"widget":"rich_text","params":{"content":"'"${content//\"/\\\"}"'"}}' >/dev/null
+    _filly_send '{"widget":"rich_text","params":{"content":"'"${content//\"/\\\"}"'"}}' >/dev/null
 }
 
 filly_tooltip() {
     local text="$1"
-    _filly_oneshot '{"widget":"tooltip","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
+    _filly_send '{"widget":"tooltip","params":{"text":"'"${text//\"/\\\"}"'"}}' >/dev/null
 }
 
 filly_disk() {
