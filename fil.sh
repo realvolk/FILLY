@@ -20,14 +20,22 @@ _start_daemon() {
 }
 
 _filly_send() {
+    echo "DEBUG _filly_send: FILLY_DAEMON=${FILLY_DAEMON:-unset}" >> /tmp/filly-debug.log
+    echo "DEBUG _filly_send: input=$1" >> /tmp/filly-debug.log
     if _start_daemon; then
-        printf '%s\n' "$1" | nc -U "${FILLY_SOCKET}" 2>/dev/null
+        echo "DEBUG _filly_send: using daemon" >> /tmp/filly-debug.log
+        local result
+        result=$(printf '%s\n' "$1" | nc -U "${FILLY_SOCKET}" 2>/dev/null) || true
+        echo "DEBUG _filly_send: daemon result=$result" >> /tmp/filly-debug.log
+        printf '%s\n' "$result"
     else
+        echo "DEBUG _filly_send: using oneshot" >> /tmp/filly-debug.log
         local tmp
         tmp=$(mktemp)
         printf '%s\n' "$1" > "$tmp"
         local result
         result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null) || true
+        echo "DEBUG _filly_send: oneshot result=$result" >> /tmp/filly-debug.log
         rm -f "$tmp"
         printf '%s\n' "$result"
     fi
