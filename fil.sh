@@ -42,8 +42,12 @@ _filly_send() {
 }
 
 _filly_result() {
+    local tmp_out
+    tmp_out=$(mktemp)
+    _filly_send "$1" > "$tmp_out"
     local resp
-    resp=$(_filly_send "$1")
+    resp=$(cat "$tmp_out")
+    rm -f "$tmp_out"
     [[ -z "$resp" ]] && return 1
     [[ "$(jq -r '.cancelled' <<< "$resp")" == "true" ]] && return 1
     jq -r '.result // empty' <<< "$resp"
