@@ -8,7 +8,7 @@ _filly_send() {
     tmp=$(mktemp)
     printf '%s\n' "$1" > "$tmp"
     local result
-    result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null) || true
+    result=$("${FILLY_BIN}" oneshot --input "$tmp" 2>/dev/null | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g') || true
     rm -f "$tmp"
     printf '%s\n' "$result"
 }
