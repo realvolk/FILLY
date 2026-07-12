@@ -50,6 +50,353 @@ fn container_node(rect: Rect, children: Vec<RenderNode>) -> RenderTree {
     RenderTree::Container { rect, background: None, border: BorderStyle::Single, padding: EdgeInsets::zero(), children, role: None, label: None, description: None }
 }
 
+fn input_node(rect: Rect, text: String, cursor: usize, placeholder: String, masked: bool) -> RenderNode {
+    RenderNode::Input { rect, text, cursor, placeholder, masked, role: None, label: None, description: None }
+}
+
+struct PasswordConfirmWidget {
+    title: String,
+    message: String,
+    pass1: String,
+    pass2: String,
+    field: usize,
+    dirty: bool,
+}
+
+impl PasswordConfirmWidget {
+    fn new(title: String, message: String) -> Self {
+        Self { title, message, pass1: String::new(), pass2: String::new(), field: 0, dirty: true }
+    }
+}
+
+impl Widget for PasswordConfirmWidget {
+    fn render(&self, area: Rect) -> RenderTree {
+        let (box_rect, box_w, box_h) = centered_box(area, 0.50, 0.50);
+        let mut children = Vec::new();
+        children.push(title_node(&self.title, box_w));
+        if !self.message.is_empty() {
+            children.push(text_node(Rect::new(1, 1, box_w - 2, 2), self.message.clone(), TextStyle::normal()));
+        }
+        let fields: [(&str, &String, &str); 2] = [
+            ("Password:", &self.pass1, "Enter password"),
+            ("Confirm:",  &self.pass2, "Confirm password"),
+        ];
+        for (i, (label, val, placeholder)) in fields.iter().enumerate() {
+            let y = 4 + i as u16 * 2;
+            let style = if i == self.field { TextStyle::selected() } else { TextStyle::normal() };
+            children.push(text_node(Rect::new(1, y, box_w - 2, 1), label.to_string(), style));
+            children.push(input_node(
+                Rect::new(1, y + 1, box_w - 2, 1),
+                val.to_string(), val.len(), placeholder.to_string(), true,
+            ));
+        }
+        if !self.pass1.is_empty() && !self.pass2.is_empty() && self.pass1 != self.pass2 {
+            children.push(text_node(
+                Rect::new(1, box_h - 3, box_w - 2, 1),
+                "Passwords do not match!".into(),
+                TextStyle { fg: Some("red".into()), bold: true, ..TextStyle::normal() },
+            ));
+        }
+        children.push(footer_node("Tab:next field  Enter:submit  Esc:cancel", box_w, box_h));
+        container_node(box_rect, children)
+    }
+
+    fn handle_event(&mut self, event: &Event) -> EventResult {
+        match event {
+            Event::Key(code, _) => match code {
+                KeyCode::Esc => EventResult::Response(WidgetResponse { result: None, cancelled: true, error: None }),
+                KeyCode::Tab => { self.field = (self.field + 1) % 2; self.dirty = true; EventResult::Handled }
+                KeyCode::Enter => {
+                    if !self.pass1.is_empty() && self.pass1 == self.pass2 {
+                        let hash = std::process::Command::new("openssl")
+                            .args(&["passwd", "-6", &self.pass1])
+                            .output()
+                            .ok()
+                            .and_then(|o| String::from_utf8(o.stdout).ok())
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_default();
+                        EventResult::Response(WidgetResponse {
+                            result: Some(Value::String(hash)),
+                            cancelled: false, error: None,
+                        })
+                    } else {
+                        EventResult::Handled
+                    }
+                }
+                KeyCode::Char(c) => {
+                    if self.field == 0 { self.pass1.push(*c); } else { self.pass2.push(*c); }
+                    self.dirty = true; EventResult::Handled
+                }
+                KeyCode::Backspace => {
+                    if self.field == 0 { self.pass1.pop(); } else { self.pass2.pop(); }
+                    self.dirty = true; EventResult::Handled
+                }
+                _ => EventResult::Unhandled,
+            },
+            _ => EventResult::Unhandled,
+        }
+    }
+
+    fn is_dirty(&self) -> bool { self.dirty }
+    fn clear_dirty(&mut self) { self.dirty = false; }
+}
+
+#[derive(Clone)]
+struct UserEntry {
+    name: String,
+    pass: String,
+    shell: String,
+    groups: Vec<String>,
+    sudo: bool,
+}
+
+struct UserManagerWidget {
+    users: Vec<UserEntry>,
+    mode: UserManagerMode,
+    selected: usize,
+    dirty: bool,
+}
+
+#[derive(PartialEq)]
+enum UserManagerMode {
+    Browsing,
+    Adding(AddUserState),
+    ConfirmDelete(usize),
+}
+
+#[derive(Clone, PartialEq)]
+struct AddUserState {
+    name: String,
+    pass: String,
+    confirm_pass: String,
+    shell_idx: usize,
+    groups: Vec<String>,
+    sudo: bool,
+    field: usize,
+}
+
+const SHELLS: &[&str] = &["/bin/bash", "/bin/zsh", "/usr/bin/fish"];
+
+impl UserManagerWidget {
+    fn new() -> Self {
+        Self { users: Vec::new(), mode: UserManagerMode::Browsing, selected: 0, dirty: true }
+    }
+
+    fn user_list_items(&self) -> Vec<ListItem> {
+        self.users.iter().map(|u| {
+            let sudo_str = if u.sudo { "sudo" } else { "nosudo" };
+            ListItem {
+                label: format!("{} ({}) [{}]", u.name, u.shell.split('/').last().unwrap_or("bash"), sudo_str),
+                meta: None,
+            }
+        }).collect()
+    }
+}
+
+impl Widget for UserManagerWidget {
+    fn render(&self, area: Rect) -> RenderTree {
+        match &self.mode {
+            UserManagerMode::Browsing => {
+                let (box_rect, box_w, box_h) = centered_box(area, 0.70, 0.80);
+                let mut children = Vec::new();
+                children.push(title_node("Manage Users", box_w));
+                if self.users.is_empty() {
+                    children.push(text_node(Rect::new(1, 2, box_w - 2, 1), "No users configured. Press A to add one.".into(), TextStyle::muted()));
+                } else {
+                    let items = self.user_list_items();
+                    children.push(list_node(items, self.selected, Rect::new(1, 1, box_w - 2, box_h - 4)));
+                }
+                children.push(footer_node("A:add  D:delete  Enter:edit  Esc:done", box_w, box_h));
+                container_node(box_rect, children)
+            }
+            UserManagerMode::Adding(state) => {
+                let (box_rect, box_w, box_h) = centered_box(area, 0.60, 0.70);
+                let mut children = Vec::new();
+                children.push(title_node("Add / Edit User", box_w));
+                let field_labels = [
+                    ("Username:", state.name.clone()),
+                    ("Password:", "•".repeat(state.pass.len())),
+                    ("Confirm:",  "•".repeat(state.confirm_pass.len())),
+                    ("Shell:",    SHELLS[state.shell_idx].to_string()),
+                    ("Groups:",   state.groups.join(", ")),
+                    ("Sudo:",     if state.sudo { "yes".to_string() } else { "no".to_string() }),
+                ];
+                for (i, (label, val)) in field_labels.iter().enumerate() {
+                    let y = 1 + i as u16;
+                    let style = if i == state.field { TextStyle::selected() } else { TextStyle::normal() };
+                    let display = if val.is_empty() && i == 0 { "(required)".to_string() } else { val.clone() };
+                    children.push(text_node(Rect::new(1, y, box_w - 2, 1), format!("{} {}", label, display), style));
+                }
+                if !state.pass.is_empty() && !state.confirm_pass.is_empty() && state.pass != state.confirm_pass {
+                    children.push(text_node(
+                        Rect::new(1, 8, box_w - 2, 1),
+                        "Passwords do not match!".into(),
+                        TextStyle { fg: Some("red".into()), bold: true, ..TextStyle::normal() },
+                    ));
+                }
+                children.push(footer_node("Tab/Down:next  Up:prev  Left/Right:change  Enter:save  Esc:cancel", box_w, box_h));
+                container_node(box_rect, children)
+            }
+            UserManagerMode::ConfirmDelete(idx) => {
+                let (box_rect, box_w, box_h) = centered_box(area, 0.40, 0.25);
+                let mut children = Vec::new();
+                children.push(title_node("Delete User", box_w));
+                children.push(text_node(Rect::new(1, 1, box_w - 2, 1), format!("Delete user '{}'?", self.users[*idx].name), TextStyle::normal()));
+                children.push(footer_node("Y:yes  N:no", box_w, box_h));
+                container_node(box_rect, children)
+            }
+        }
+    }
+
+    fn handle_event(&mut self, event: &Event) -> EventResult {
+        match &self.mode {
+            UserManagerMode::ConfirmDelete(idx) => {
+                let idx = *idx;
+                if let Event::Key(code, _) = event {
+                    match code {
+                        KeyCode::Char('y') | KeyCode::Char('Y') => {
+                            self.users.remove(idx);
+                            if self.selected >= self.users.len() && self.selected > 0 {
+                                self.selected -= 1;
+                            }
+                            self.mode = UserManagerMode::Browsing;
+                            self.dirty = true;
+                            EventResult::Handled
+                        }
+                        _ => { self.mode = UserManagerMode::Browsing; self.dirty = true; EventResult::Handled }
+                    }
+                } else { EventResult::Unhandled }
+            }
+            UserManagerMode::Browsing => match event {
+                Event::Key(code, _) => match code {
+                    KeyCode::Esc => {
+                        let result: Vec<Value> = self.users.iter().map(|u| serde_json::json!({
+                            "name": u.name, "pass": u.pass, "shell": u.shell,
+                            "groups": u.groups.join(","), "sudo": u.sudo,
+                        })).collect();
+                        EventResult::Response(WidgetResponse { result: Some(Value::Array(result)), cancelled: false, error: None })
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if self.selected > 0 { self.selected -= 1; self.dirty = true; }
+                        EventResult::Handled
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if self.selected + 1 < self.users.len() { self.selected += 1; self.dirty = true; }
+                        EventResult::Handled
+                    }
+                    KeyCode::Char('a') | KeyCode::Char('A') => {
+                        self.mode = UserManagerMode::Adding(AddUserState {
+                            name: String::new(), pass: String::new(), confirm_pass: String::new(),
+                            shell_idx: 0, groups: vec!["wheel".into(), "audio".into(), "video".into(), "storage".into()],
+                            sudo: true, field: 0,
+                        });
+                        self.dirty = true; EventResult::Handled
+                    }
+                    KeyCode::Char('d') | KeyCode::Char('D') => {
+                        if self.selected < self.users.len() {
+                            self.mode = UserManagerMode::ConfirmDelete(self.selected);
+                            self.dirty = true;
+                        }
+                        EventResult::Handled
+                    }
+                    KeyCode::Enter => {
+                        if self.selected < self.users.len() {
+                            let u = &self.users[self.selected];
+                            self.mode = UserManagerMode::Adding(AddUserState {
+                                name: u.name.clone(), pass: String::new(), confirm_pass: String::new(),
+                                shell_idx: SHELLS.iter().position(|s| *s == u.shell).unwrap_or(0),
+                                groups: u.groups.clone(), sudo: u.sudo, field: 0,
+                            });
+                            self.dirty = true;
+                        }
+                        EventResult::Handled
+                    }
+                    _ => EventResult::Unhandled,
+                },
+                _ => EventResult::Unhandled,
+            },
+            UserManagerMode::Adding(state) => {
+                let mut state = state.clone();
+                let result = match event {
+                    Event::Key(code, _) => match code {
+                        KeyCode::Esc => { self.dirty = true; EventResult::Handled }
+                        KeyCode::Tab | KeyCode::Down => { state.field = (state.field + 1) % 6; self.dirty = true; EventResult::Handled }
+                        KeyCode::Up => { state.field = (state.field + 5) % 6; self.dirty = true; EventResult::Handled }
+                        KeyCode::Enter => {
+                            if !state.name.is_empty() && !state.pass.is_empty() && state.pass == state.confirm_pass {
+                                let hash = std::process::Command::new("openssl")
+                                    .args(&["passwd", "-6", &state.pass])
+                                    .output().ok()
+                                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                                    .map(|s| s.trim().to_string())
+                                    .unwrap_or_default();
+                                let entry = UserEntry {
+                                    name: state.name.clone(), pass: hash,
+                                    shell: SHELLS[state.shell_idx].to_string(),
+                                    groups: state.groups.clone(), sudo: state.sudo,
+                                };
+                                if self.selected < self.users.len() {
+                                    self.users[self.selected] = entry;
+                                } else {
+                                    self.users.push(entry);
+                                }
+                                self.dirty = true;
+                                self.mode = UserManagerMode::Browsing;
+                                EventResult::Handled
+                            } else { EventResult::Handled }
+                        }
+                        KeyCode::Left => {
+                            match state.field {
+                                3 => { state.shell_idx = (state.shell_idx + SHELLS.len() - 1) % SHELLS.len(); self.dirty = true; }
+                                5 => { state.sudo = !state.sudo; self.dirty = true; }
+                                _ => {}
+                            }
+                            EventResult::Handled
+                        }
+                        KeyCode::Right => {
+                            match state.field {
+                                3 => { state.shell_idx = (state.shell_idx + 1) % SHELLS.len(); self.dirty = true; }
+                                5 => { state.sudo = !state.sudo; self.dirty = true; }
+                                _ => {}
+                            }
+                            EventResult::Handled
+                        }
+                        KeyCode::Char(c) => {
+                            match state.field {
+                                0 => { state.name.push(*c); self.dirty = true; }
+                                1 => { state.pass.push(*c); self.dirty = true; }
+                                2 => { state.confirm_pass.push(*c); self.dirty = true; }
+                                _ => {}
+                            }
+                            EventResult::Handled
+                        }
+                        KeyCode::Backspace => {
+                            match state.field {
+                                0 => { state.name.pop(); self.dirty = true; }
+                                1 => { state.pass.pop(); self.dirty = true; }
+                                2 => { state.confirm_pass.pop(); self.dirty = true; }
+                                _ => {}
+                            }
+                            EventResult::Handled
+                        }
+                        _ => EventResult::Unhandled,
+                    },
+                    _ => EventResult::Unhandled,
+                };
+                if matches!(result, EventResult::Handled) {
+                    self.mode = UserManagerMode::Adding(state);
+                } else if self.mode != UserManagerMode::Browsing {
+                    self.mode = UserManagerMode::Adding(state);
+                }
+                result
+            }
+        }
+    }
+
+    fn is_dirty(&self) -> bool { self.dirty }
+    fn clear_dirty(&mut self) { self.dirty = false; }
+}
+
 struct AnvilWidget {
     title: String,
     categories: Vec<(String, Vec<(String, String)>)>,
@@ -70,20 +417,17 @@ impl Widget for AnvilWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.85, 0.90);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         if self.categories.is_empty() {
             children.push(text_node(Rect::new(1, 1, box_w - 2, 1), "No actions available.".into(), TextStyle::normal()));
         } else {
             let left_w = box_w * 30 / 100;
             let right_x = left_w + 2;
             let right_w = box_w - right_x - 1;
-
             let cat_items: Vec<ListItem> = self.categories.iter().enumerate().map(|(i, (name, _))| {
                 let label = if i == self.cat_idx { format!("> {}", name) } else { format!("  {}", name) };
                 ListItem { label, meta: None }
             }).collect();
             children.push(list_node(cat_items, self.cat_idx, Rect::new(1, 1, left_w, box_h - 3)));
-
             let actions = &self.categories[self.cat_idx].1;
             let action_items: Vec<ListItem> = actions.iter().enumerate().map(|(i, (_, desc))| {
                 let label = if i == self.action_idx && self.mode == AnvilMode::Browsing {
@@ -95,7 +439,6 @@ impl Widget for AnvilWidget {
             }).collect();
             children.push(list_node(action_items, self.action_idx, Rect::new(right_x, 1, right_w, box_h - 3)));
         }
-
         match &self.mode {
             AnvilMode::Browsing => {
                 children.push(footer_node("Up/Down:actions  Left/Right:categories  Enter:execute  Esc:cancel", box_w, box_h));
@@ -105,7 +448,6 @@ impl Widget for AnvilWidget {
                 children.push(text_node(Rect::new(1, box_h - 2, box_w - 2, 1), "[Y]es  [N]o".into(), TextStyle::accent()));
             }
         }
-
         container_node(box_rect, children)
     }
 
@@ -212,20 +554,17 @@ impl Widget for PowerUserWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.85, 0.90);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         if self.categories.is_empty() {
             children.push(text_node(Rect::new(1, 1, box_w - 2, 1), "No categories configured.".into(), TextStyle::normal()));
         } else {
             let left_w = box_w * 30 / 100;
             let right_x = left_w + 2;
             let right_w = box_w - right_x - 1;
-
             let cat_items: Vec<ListItem> = self.categories.iter().enumerate().map(|(i, (name, _))| {
                 let label = if i == self.cat_idx { format!("> {}", name) } else { format!("  {}", name) };
                 ListItem { label, meta: None }
             }).collect();
             children.push(list_node(cat_items, self.cat_idx, Rect::new(1, 1, left_w, box_h - 3)));
-
             let items = &self.categories[self.cat_idx].1;
             let item_list: Vec<ListItem> = items.iter().enumerate().map(|(i, (id, val))| {
                 let label = if i == self.item_idx && self.mode == PowerUserMode::Browsing {
@@ -237,7 +576,6 @@ impl Widget for PowerUserWidget {
             }).collect();
             children.push(list_node(item_list, self.item_idx, Rect::new(right_x, 1, right_w, box_h - 3)));
         }
-
         match &self.mode {
             PowerUserMode::Browsing => {
                 children.push(footer_node("Up/Down:items  Left/Right:categories  Enter:edit  F1:Build  Esc:cancel", box_w, box_h));
@@ -247,7 +585,6 @@ impl Widget for PowerUserWidget {
                 children.push(text_node(Rect::new(1, box_h - 2, box_w - 2, 1), "[Y]es  [N]o".into(), TextStyle::accent()));
             }
         }
-
         container_node(box_rect, children)
     }
 
@@ -322,7 +659,6 @@ impl Widget for RecoveryWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.85, 0.85);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         let items: Vec<ListItem> = self.status_items.iter().enumerate().map(|(i, (_, label, status))| {
             let icon = match status.as_str() { "ok" => "OK", "warn" => "~ ", "error" => "!!", _ => "  " };
             let label = if i == self.selected && self.mode == RecoveryMode::Browsing {
@@ -333,21 +669,16 @@ impl Widget for RecoveryWidget {
             ListItem { label, meta: None }
         }).collect();
         children.push(list_node(items, self.selected, Rect::new(1, 1, box_w - 2, box_h - 4)));
-
         let repair_text: Vec<String> = self.repairs.iter().enumerate()
             .map(|(i, (_, desc))| format!("F{}:{}", i + 1, desc)).collect();
         let footer = format!("{}   Up/Down:move  Esc:cancel", repair_text.join("  "));
-
         match &self.mode {
-            RecoveryMode::Browsing => {
-                children.push(footer_node(&footer, box_w, box_h));
-            }
+            RecoveryMode::Browsing => { children.push(footer_node(&footer, box_w, box_h)); }
             RecoveryMode::ConfirmRepair(key) => {
                 children.push(text_node(Rect::new(1, box_h - 3, box_w - 2, 1), format!("Run repair '{}'?", key), TextStyle::accent()));
                 children.push(text_node(Rect::new(1, box_h - 2, box_w - 2, 1), "[Y]es  [N]o".into(), TextStyle::accent()));
             }
         }
-
         container_node(box_rect, children)
     }
 
@@ -410,20 +741,17 @@ impl Widget for IsoWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.85, 0.90);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         if self.categories.is_empty() {
             children.push(text_node(Rect::new(1, 1, box_w - 2, 1), "No categories configured.".into(), TextStyle::normal()));
         } else {
             let left_w = box_w * 35 / 100;
             let right_x = left_w + 2;
             let right_w = box_w - right_x - 1;
-
             let cat_items: Vec<ListItem> = self.categories.iter().enumerate().map(|(i, (name, _))| {
                 let label = if i == self.cat_idx { format!("> {}", name) } else { format!("  {}", name) };
                 ListItem { label, meta: None }
             }).collect();
             children.push(list_node(cat_items, self.cat_idx, Rect::new(1, 1, left_w, box_h - 3)));
-
             let items = &self.categories[self.cat_idx].1;
             let item_list: Vec<ListItem> = items.iter().enumerate().map(|(i, (id, val))| {
                 let label = if i == self.item_idx && self.mode == IsoMode::Browsing {
@@ -435,7 +763,6 @@ impl Widget for IsoWidget {
             }).collect();
             children.push(list_node(item_list, self.item_idx, Rect::new(right_x, 1, right_w, box_h - 3)));
         }
-
         match &self.mode {
             IsoMode::Browsing => {
                 children.push(footer_node("Up/Down:items  Left/Right:categories  Enter:edit  F1:Build  Esc:cancel", box_w, box_h));
@@ -445,7 +772,6 @@ impl Widget for IsoWidget {
                 children.push(text_node(Rect::new(1, box_h - 2, box_w - 2, 1), "[Y]es  [N]o".into(), TextStyle::accent()));
             }
         }
-
         container_node(box_rect, children)
     }
 
@@ -515,14 +841,11 @@ impl Widget for MigrationInitWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.50, 0.35);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         let source_style = if self.field == 0 { TextStyle::selected() } else { TextStyle::normal() };
         let target_style = if self.field == 1 { TextStyle::selected() } else { TextStyle::normal() };
-
         children.push(text_node(Rect::new(1, 1, box_w - 2, 1), format!("Source: {}", self.current_init), source_style));
         children.push(text_node(Rect::new(1, 2, box_w - 2, 1), format!("Target: {}", self.target_inits[self.target_idx]), target_style));
         children.push(footer_node("Up/Down:field  Left/Right:change  Enter:confirm  Esc:cancel", box_w, box_h));
-
         container_node(box_rect, children)
     }
 
@@ -580,7 +903,6 @@ impl Widget for MigrationDesktopWidget {
         let (box_rect, box_w, box_h) = centered_box(area, 0.55, 0.55);
         let mut children = Vec::new();
         children.push(title_node(&self.title, box_w));
-
         let fields = [
             ("Source DE", self.current_de.as_str()),
             ("Target DE", self.des[self.target_idx].as_str()),
@@ -589,12 +911,10 @@ impl Widget for MigrationDesktopWidget {
             ("Audio", self.audio_choices[self.audio_idx].as_str()),
             ("Network", self.net_choices[self.net_idx].as_str()),
         ];
-
         for (i, (label, val)) in fields.iter().enumerate() {
             let style = if i == self.field { TextStyle::selected() } else { TextStyle::normal() };
             children.push(text_node(Rect::new(1, 1 + i as u16, box_w - 2, 1), format!("{}: {}", label, val), style));
         }
-
         children.push(footer_node("Up/Down:field  Left/Right:change  Enter:confirm  Esc:cancel", box_w, box_h));
         container_node(box_rect, children)
     }
@@ -769,5 +1089,16 @@ pub extern "C" fn register(registry: &mut PluginRegistry) {
             target_idx: 0, dm_idx: 0, x_idx: 0, audio_idx: 0, net_idx: 0,
             field: 0, dirty: true,
         })
+    });
+
+    registry.register("password_confirm", |req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        let p = &req.params;
+        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("Password").to_string();
+        let message = p.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        Box::new(PasswordConfirmWidget::new(title, message))
+    });
+
+    registry.register("user_manager", |_req: &WidgetRequest, _store: &Store, _theme: &Theme| {
+        Box::new(UserManagerWidget::new())
     });
 }
