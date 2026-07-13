@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.2.0 (2026-07-13) — FILLY
+
+### Changed
+- **Complete rewrite of core in C** — replaced Rust (`filly-core`, `filly-terminal`, `filly-daemon`, `filly-protocol`, `filly-bin`) with ANSI C using raw termios + ANSI escapes; Python GTK4 graphical backend unchanged
+- Widget trait system ported to C vtable pattern — `WidgetVTable` struct with `render`, `handle_event`, `is_dirty`, `clear_dirty`, `destroy` function pointers
+- RenderTree replaced with direct ANSI escape rendering — `renderer.c` walks the tree and writes escape sequences to a buffer with styled box borders (single/double/rounded), text wrapping with word break, scrollable lists with selected highlight, gauge bars with percentage overlay, calendar month grid with day selection, form field highlighting, tabbed content areas, split pane dividers, tree indentation with expand/collapse markers, context menu with highlight, toast notifications, and 256-color styled borders
+- Plugin system uses `dlopen`/`dlsym` — `.so` files export `register_plugins(void (*reg)(const char *, WidgetFactory))`
+- Build system: single `Makefile` producing `filly` binary + `libartixforge.so` + `libgforge.so`; `cJSON` vendored as single-file dependency
+- JSON protocol unchanged — same `WidgetRequest`/`WidgetResponse` schema, same daemon socket behavior, same CLI interface (`daemon`, `oneshot`, `batch`, `demo`)
+- `fil.sh` and `filly_graphical.sh` wrappers unchanged — same function signatures, same JSON protocol
+- Rust toolchain no longer required — only `gcc`, `make`, `cJSON`
+- Terminal input parser rewritten with `select()`-based timeout — handles multi-byte CSI sequences, SS3 F-keys, and lone ESC detection without blocking
+
+### Added
+- `Makefile` with `all`, `plugins`, `install`, `clean` targets
+- `cJSON.c`/`cJSON.h` vendored at repository root
+- All 33 widgets ported to C with identical behavior to v0.1.1
+- ArtixForge plugin pack: `install_hub`, `anvil`, `poweruser`, `recovery`, `iso`, `migration_init`, `migration_desktop`, `password_confirm`, `user_manager`
+- GForge plugin pack: `gforge_hub`, `stage3_picker`, `profile_picker`, `kernel_picker`, `use_flags`, `cflags`
+- `install_hub` widget with full inline editing — menu, input, password, yes/no, filter, and multiselect sub-widgets rendered as centered modal overlays with independent event handling
+- Text editor widget with Home/End/PageUp/PageDown/Delete, Ctrl+S save, Ctrl+D delete line, visible inverse-video cursor block, and multiline content loading
+- Range slider with interactive bar, percentage display, and keyboard controls
+- Color picker with RGB sliders, ANSI 256-color preview, hex output, and per-channel adjustment
+- Split panes with F1/F2 pane switching and ESC to dismiss
+- Tabs widget with left/right navigation and embedded child widgets
+- Tree widget with expand/collapse and keyboard navigation
+- Interactive calendar with month grid, day selection, arrow key navigation
+- Gauge widget with percentage bar and label
+- Toggle widget with centered ON/OFF switch
+- Badge widget with dismiss-on-keypress
+- Toast notification with centered message and auto-dismiss timer
+- Session-aware terminal setup/teardown — alt screen and raw mode toggle only once per session, preventing repeated screen flicker across widget transitions
+
+### Removed
+- Rust workspace (`Cargo.toml`, all `src/` directories)
+- Rust dependencies (`crossterm`, `ratatui`, `clap`, `serde`, `serde_json`, `libloading`, `dirs`, `uuid`, `anyhow`)
+- Rust plugin `.so` files from `target/release/`
+
+### Fixed
+- Title border rendering — borders now draw correctly with proper corner characters, horizontal lines, and vertical sides spanning the full widget height
+- Title text appears centered in the top border with a background fill that covers the border line beneath it
+- Text centering across all widgets — messages, footers, and content blocks properly aligned with padding that fills the full line width to prevent border bleed-through
+- Terminal corruption on exit — alt screen and raw mode teardown now idempotent, called once per session instead of once per widget
+- F-key parsing — CSI sequences with multi-digit parameters (`\033[11~` through `\033[24~`) correctly mapped to F1-F12
+- ESC key detection — lone ESC distinguished from escape sequence prefixes via inter-byte timeout
+- Hub widget F1/ESC handling — confirmation prompts render as proper dialogs with Yes/No options
+- Hub sub-widget dirty flag propagation — editing mode renders correctly on first frame
+- Widget-in-hub overlay rendering — sub-widgets render as centered overlays with dark background on top of hub
+- Disk picker populates dynamic `lsblk` list at runtime
+- Kernel picker uses flat searchable filter list instead of nested sub-menus
+- Yes/No widgets carry descriptive messages into edit overlay
+- Password confirm widget uses safe hashing without shell injection
+- User manager widget supports add/edit/delete with group selection and password confirmation
+- ANSI escape sequence leak into JSON output — escape sequences stripped before parsing
+- Terminal cursor restoration after widget exit — newline printed after JSON response
+- Form widget factory now properly implemented — fields accept keyboard input, Tab/Shift+Tab navigation, Enter to submit
+- Tabs and split panes factory implementations — previously returned NULL stubs
+- Tree widget factory implementation — previously returned NULL stub
+- Gauge bar uses safe ASCII characters across all locales
+- Color picker converts RGB to nearest ANSI 256-color palette entry, avoiding malformed escape sequences
+- Notification message vertically centered in toast box
+- Badge and spinner widgets dismiss on keypress/ESC to allow demo progression
+
 ## v0.1.1 (2026-07-11) — FILLY
 
 ### Added
