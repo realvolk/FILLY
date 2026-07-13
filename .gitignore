@@ -1,23 +1,8 @@
-!target/
-target/.rustc_info.json
-target/CACHEDIR.TAG
-!target/release/
-target/release/*
+*.o
 
-debug/
-**/*.rs.bk
-*.pdb
-
-Cargo.lock
-
-# Compiled plugins
-*.so
-*.dylib
-*.dll
-
-!target/release/filly
-!target/release/libfilly_plugin_artixforge.so
-!target/release/libfilly_plugin_gforge.so
+!filly
+!libartixforge.so
+!libgforge.so
 
 __pycache__/
 *.pyc

@@ -3,7 +3,7 @@
 A unified UI toolkit that renders the same widget as a terminal TUI or a native
 GTK4 window using a single JSON protocol.
 
-**One daemon. One core. Two faces.**
+**One library. Two faces. Zero compromises.**
 
 Designed for Linux installers, CLI tools, and any project needing interactive
 prompts that work transparently over SSH, in a terminal, or on a desktop.
@@ -33,7 +33,7 @@ The caller doesn't know or care which backend is active.
 
 ## Architecture
 
-```text
+```
                         JSON IPC (Unix socket / stdin)
                                │
 ┌──────────────────────────────┼──────────────────────────────┐
@@ -45,30 +45,30 @@ The caller doesn't know or care which backend is active.
                     ┌──────────▼──────────┐
                     │   filly-protocol    │
                     │  Request / Response │
+                    │      (cJSON)        │
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
                     │    filly-daemon     │
-                    │  Socket listener    │
-                    │  Client multiplex   │
-                    │  Session persist    │
+                    │  Unix socket        │
+                    │  Client threads     │
+                    │  Session state      │
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
                     │     filly-core      │
-                    │  Widget state       │
-                    │  Event routing      │
-                    │  Focus management   │
-                    │  Layout engine      │
-                    │  Style/themes       │
-                    │  Store (shared KV)  │
+                    │  Widget vtable      │
+                    │  Event loop         │
                     │  RenderTree         │
+                    │  Store (KV)         │
+                    │  Themes             │
                     └──────┬───────┬──────┘
                            │       │
               ┌────────────▼─┐ ┌───▼────────────┐
               │ filly-terminal│ │ filly-graphical│
-              │ crossterm     │ │ GTK4           │
-              │ ratatui       │ │ libadwaita     │
+              │ ANSI escapes  │ │ GTK4           │
+              │ termios       │ │ libadwaita     │
+              │ 256-color     │ │ (Python)       │
               └───────────────┘ └────────────────┘
 ```
 
@@ -85,75 +85,76 @@ and hope the user squints.
 
 **gum** is a well-executed tool for shell scripts that need occasional
 interactive prompts. It's prettier than dialog, integrates cleanly, and works
-reliably. But it's a collection of independent commands, each spawning a new
-process, parsing arguments, rendering, and exiting. It has no persistent
-state, no composite widgets, no daemon mode, no layout control, no graphical
-backend, and no plugin system. It is the right tool for simple scripts, and
-the wrong tool for anything ambitious.
+reliably. But it's a collection of independent commands with no persistent
+state, no composite widgets, no daemon mode, and no graphical backend. It is
+the right tool for simple scripts, and the wrong tool for anything ambitious.
 
 **forge-tui** replaced gum for the ArtixForge installer. It added a daemon,
-proper centering, mouse support, a progress bar with stage markers, composite
-hub widgets, and a shared state store. It proved that a TUI toolkit could be
-fast, beautiful, and functional. But it was tied to the terminal—no graphical
-backend, no Python bindings, no plugin system, and the codebase was tightly
-coupled to the installer's specific needs.
+proper centering, mouse support, progress bars with stage markers, composite
+hub widgets, and a shared state store. It proved a TUI toolkit could be fast,
+beautiful, and functional. But it was Rust-only, terminal-only, with no Python
+bindings and no plugin system.
 
 **forge-gui** was the GTK4 sibling. Same JSON protocol, completely separate
-Python codebase. It worked, but maintaining two independent implementations of
-every widget was unsustainable.
+Python codebase. Maintaining two independent implementations of every widget
+was unsustainable.
 
-FILLY is the merger.
+FILLY is the merger — and now entirely in C.
 
 It takes the protocol from forge-tui, the widget library from both, and the
 lessons learned from building a real installer, and wraps them in a single
-Rust core with pluggable backends.
+ANSI C core with pluggable backends.
 
-The terminal backend inherits forge-tui's ratatui rendering.
+The terminal backend uses raw ANSI escapes and termios — no Rust, no ratatui,
+no crossterm. Just C and a terminal.
 
-The graphical backend inherits forge-gui's GTK4 windows.
+The graphical backend inherits forge-gui's GTK4 windows — unchanged.
 
 The Bash library is a drop-in replacement for the gum and forge-tui shell
 functions.
 
-The Python bindings let you use the same widgets from Python scripts.
-
-> **One library. Two faces. Zero compromises.**
+> **One library. Two faces. Zero dependencies beyond a C compiler.**
 ---
 
 ## Features
 
 - **33 widget types** — menus, inputs, checklists, file pickers, text editors,
   progress bars, disk partitioners, color pickers, and more
-- **Dual backends** — terminal (crossterm + ratatui) and graphical (GTK4 +
-  libadwaita) from the same JSON protocol
-- **Daemon mode** — persistent Unix socket listener with session state,
-  streaming progress, and state subscriptions
-- **Plugin system** — load custom widgets from `.so` files at runtime
-- **Theme engine** — 8 built-in themes with live reload
+- **Dual backends** — terminal (ANSI C + termios) and graphical (GTK4 +
+  libadwaita, Python) from the same JSON protocol
+- **Daemon mode** — persistent Unix socket listener with session state and
+  client threading
+- **Plugin system** — load custom widgets from `.so` files at runtime via
+  `dlopen`/`dlsym`
+- **Theme engine** — 8 built-in themes with JSON stylesheets
 - **Client libraries** — Bash, Python, Go, and Node.js
 - **Accessibility** — AT-SPI support in the GUI backend, metadata in the
   terminal render tree
-- **Clipboard** — paste from system clipboard in all text widgets
-- **Binary protocol** — optional MessagePack mode for lower latency
+- **Styled terminal UI** — single/double/rounded borders, text wrapping with
+  word break, scrollable lists, gauge bars, calendar grid, tabbed panes,
+  split views, tree indentation, 256-color support
+- **Zero Rust dependencies** — pure C, buildable with `gcc` and `make`
 
 ---
 
-## Crate Structure
+## Project Structure
 
-```text
+```
 FILLY/
-├── filly-protocol/       # Request/Response types, JSON schema
-├── filly-core/           # Widget trait, layout, events, store, themes
-├── filly-daemon/         # Unix socket IPC, client handling
-├── filly-terminal/       # Crossterm + Ratatui backend
-├── filly-graphical/      # GTK4 + libadwaita backend (Python)
+├── filly-protocol/       # Request/Response types, JSON parse/serialize
+├── filly-core/           # Widget vtable, event loop, RenderTree, store, themes
+├── filly-daemon/         # Unix socket IPC, client threads
+├── filly-terminal/       # ANSI escape renderer, termios backend
+├── filly-graphical/      # GTK4 + libadwaita backend (Python, unchanged)
 ├── filly-python/         # Python bindings
-├── filly-bin/            # CLI entry point
+├── filly-bin/            # CLI entry point (main.c)
+├── cJSON.c/h             # Vendored JSON parser
+├── Makefile              # Build system
 ├── fil.sh                # Single-file Bash library
 ├── themes/               # Predefined theme files
 ├── plugins/              # Domain-specific plugin packs
-│   ├── artixforge/       # ArtixForge installer widgets
-│   └── gforge/           # Gentoo/GForge portage widgets
+│   ├── artixforge/       # ArtixForge installer widgets (C + Python)
+│   └── gforge/           # Gentoo/GForge portage widgets (C + Python)
 ├── go-filly/             # Go client library
 └── node-filly/           # Node.js client library
 ```
@@ -165,8 +166,8 @@ FILLY/
 Build the terminal backend:
 
 ```bash
-cargo build --release
-./target/release/filly demo
+make
+./filly demo
 ```
 
 Use from Bash:
