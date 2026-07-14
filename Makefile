@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -fPIC -I.
-LDFLAGS = -ldl -lpthread -lm
+LDFLAGS = -ldl -lpthread -lm -rdynamic
 PREFIX = /usr/local
 
 SRCS = filly-bin/main.c \
