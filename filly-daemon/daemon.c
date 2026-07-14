@@ -46,7 +46,7 @@ static void *handle_client(void *arg) {
     terminal_backend_init(&t);
     Backend backend = { .vtable = &terminal_vtable };
 
-    char buf[65536];
+    char buf[131072];
     while (1) {
         int n = 0;
         while (n < (int)sizeof(buf) - 1) {
