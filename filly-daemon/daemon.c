@@ -33,7 +33,13 @@ static void load_plugins(void) {
             if (lib) {
                 void (*reg)(void (*)(const char *, WidgetFactory));
                 *(void **)(&reg) = dlsym(lib, "register_plugins");
-                if (reg) reg(widget_registry_register);
+                if (reg) {
+                    reg(widget_registry_register);
+                } else {
+                    fprintf(stderr, "Plugin %s: missing register_plugins symbol\n", entry->d_name);
+                }
+            } else {
+                fprintf(stderr, "Failed to load plugin %s: %s\n", entry->d_name, dlerror());
             }
         }
     }
