@@ -9,6 +9,7 @@ typedef struct {
     int total;
     char *session_id;
     char *tty;
+    bool relay;
 } WidgetRequest;
 
 typedef struct {

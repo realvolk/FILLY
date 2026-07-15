@@ -18,6 +18,8 @@ WidgetRequest *widget_request_parse(const char *json_str) {
     if (sid && sid->valuestring) req->session_id = strdup(sid->valuestring);
     cJSON *tty = cJSON_GetObjectItem(root, "tty");
     if (tty && tty->valuestring) req->tty = strdup(tty->valuestring);
+    cJSON *relay = cJSON_GetObjectItem(root, "relay");
+    if (relay) req->relay = relay->valueint ? true : false;
     cJSON_Delete(root);
     return req;
 }
