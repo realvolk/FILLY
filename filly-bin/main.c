@@ -509,6 +509,7 @@ int main(int argc, char **argv) {
     }
 
     register_builtin_widgets();
+    load_plugins();
 
     if (strcmp(argv[1], "daemon") == 0) {
         const char *socket = "/tmp/filly.sock";
