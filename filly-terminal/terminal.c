@@ -36,7 +36,7 @@ static bool term_draw(void *self, RenderTree *tree) {
     struct winsize ws;
     if (ioctl(t->tty_fd, TIOCGWINSZ, &ws) == 0) { w = ws.ws_col; h = ws.ws_row; }
     else { w = 80; h = 24; }
-    char buf[65536];
+    char buf[524288];
     render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
     write(t->tty_fd, buf, strlen(buf));
     return true;

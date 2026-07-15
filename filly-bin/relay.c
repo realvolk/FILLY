@@ -53,7 +53,7 @@ int relay_main(const char *sock_path) {
     raw.c_cc[VTIME] = 1;
     tcsetattr(tty_fd, TCSAFLUSH, &raw);
 
-    char buf[65536];
+    char buf[524288];
     while (1) {
         fd_set rfds; FD_ZERO(&rfds);
         FD_SET(tty_fd, &rfds); FD_SET(fd, &rfds);

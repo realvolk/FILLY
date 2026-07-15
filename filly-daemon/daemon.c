@@ -27,7 +27,7 @@ static bool sock_setup(void *self) { (void)self; return true; }
 static bool sock_draw(void *self, RenderTree *tree) {
     SocketBackend *s = (SocketBackend *)self;
     int w = s->term_w, h = s->term_h;
-    char buf[65536];
+    char buf[524288];
     render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
     int len = strlen(buf);
     char header[64];
