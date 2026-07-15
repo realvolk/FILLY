@@ -255,6 +255,176 @@ static void hub_enter_edit(HubData *d, HubItem *item) {
     d->dirty = true;
 }
 
+static void hub_apply_profile(HubData *d, const char *key, const char *variant) {
+    hub_set(d, "FS_TYPE", "ext4");
+    hub_set(d, "BOOTLOADER", "grub");
+    hub_set(d, "KERNEL_CHOICE", "linux");
+    hub_set(d, "INIT", "openrc");
+    hub_set(d, "PRIV_ESCALATION", "sudo");
+    hub_set(d, "USE_LUKS", "no");
+    hub_set(d, "USE_LVM", "no");
+    hub_set(d, "GENERATE_UKI", "no");
+    hub_set(d, "ALLOW_OFFLINE", "no");
+    hub_set(d, "ENABLE_ARCH_REPOS", "no");
+    hub_set(d, "MICROCODE_OVERRIDE", "auto");
+    hub_set(d, "KEEP_BINARY_KERNEL", "yes");
+    hub_set(d, "COREUTILS", "gnu");
+    hub_set(d, "KERNEL_CONFIG_DEPTH", "auto");
+    hub_set(d, "POWER_USER", "no");
+    hub_set(d, "USER_SHELL", "bash");
+    hub_set(d, "SWAP_ENABLED", "none");
+    hub_set(d, "SWAP_SIZE", "0");
+    hub_set(d, "ZRAM_PERCENT", "50");
+    hub_set(d, "BTRFS_LAYOUT", "standard");
+    hub_set(d, "NETWORK_STACK", "networkmanager");
+    hub_set(d, "AUDIO_STACK", "pipewire");
+    hub_set(d, "DISPLAY_MANAGER", "none");
+    hub_set(d, "X_STACK", "xorg");
+
+    if (strcmp(key, "QUICK_PROFILE_KDE") == 0) {
+        hub_set(d, "WM_DE", "kde");
+        hub_set(d, "DISPLAY_MANAGER", "sddm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git flatpak fastfetch firewalld bluez zram-tools firefox neovim alacritty fzf zoxide starship eza btop htop tmux mpv");
+        if (strcmp(variant, "Full") == 0) hub_set(d, "KDE_PROFILE", "full");
+        else if (strcmp(variant, "Desktop") == 0) hub_set(d, "KDE_PROFILE", "desktop");
+        else hub_set(d, "KDE_PROFILE", "minimal");
+        hub_set(d, "QUICK_PROFILE", "KDE");
+    } else if (strcmp(key, "QUICK_PROFILE_XFCE") == 0) {
+        hub_set(d, "WM_DE", "xfce4");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "EXTRAS", strcmp(variant, "Full") == 0 ? "git firefox neovim alacritty fzf zoxide starship eza btop tmux mpv" : "git neovim tmux");
+        hub_set(d, "QUICK_PROFILE", "XFCE");
+    } else if (strcmp(key, "QUICK_PROFILE_MANGO") == 0) {
+        hub_set(d, "WM_DE", "mango");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux");
+        hub_set(d, "QUICK_PROFILE", "MangoWM");
+    } else if (strcmp(key, "QUICK_PROFILE_HYPRLAND") == 0) {
+        hub_set(d, "WM_DE", "hyprland");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi hyprpaper hyprlock fzf zoxide starship eza btop tmux");
+        hub_set(d, "QUICK_PROFILE", "Hyprland");
+    } else if (strcmp(key, "QUICK_PROFILE_SWAY") == 0) {
+        hub_set(d, "WM_DE", "sway");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux");
+        hub_set(d, "QUICK_PROFILE", "Sway");
+    } else if (strcmp(key, "QUICK_PROFILE_NIRI") == 0) {
+        hub_set(d, "WM_DE", "niri");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "EXTRAS", "git firefox alacritty waybar fuzzel swaybg swaylock fzf zoxide starship eza btop tmux");
+        hub_set(d, "QUICK_PROFILE", "Niri");
+    } else if (strcmp(key, "QUICK_PROFILE_I3") == 0) {
+        hub_set(d, "WM_DE", "i3wm");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git firefox alacritty fzf zoxide starship eza btop tmux");
+        hub_set(d, "QUICK_PROFILE", "i3wm");
+    } else if (strcmp(key, "QUICK_PROFILE_DWM") == 0) {
+        hub_set(d, "WM_DE", "dwm");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git firefox st fzf zoxide starship eza tmux");
+        hub_set(d, "QUICK_PROFILE", "dwm");
+    } else if (strcmp(key, "QUICK_PROFILE_LXQT") == 0) {
+        hub_set(d, "WM_DE", "lxqt");
+        hub_set(d, "DISPLAY_MANAGER", "sddm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "QUICK_PROFILE", "LXQt");
+    } else if (strcmp(key, "QUICK_PROFILE_LXDE") == 0) {
+        hub_set(d, "WM_DE", "lxde");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "QUICK_PROFILE", "LXDE");
+    } else if (strcmp(key, "QUICK_PROFILE_CINNAMON") == 0) {
+        hub_set(d, "WM_DE", "cinnamon");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "QUICK_PROFILE", "Cinnamon");
+    } else if (strcmp(key, "QUICK_PROFILE_BUDGIE") == 0) {
+        hub_set(d, "WM_DE", "budgie");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "QUICK_PROFILE", "Budgie");
+    } else if (strcmp(key, "QUICK_PROFILE_MOKSHA") == 0) {
+        hub_set(d, "WM_DE", "moksha");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "EXTRAS", "git firefox terminology fzf zoxide starship eza tmux");
+        hub_set(d, "QUICK_PROFILE", "Moksha");
+    } else if (strcmp(key, "QUICK_PROFILE_COSMIC") == 0) {
+        hub_set(d, "WM_DE", "cosmic");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "QUICK_PROFILE", "COSMIC");
+    } else if (strcmp(key, "QUICK_PROFILE_SERVER") == 0) {
+        hub_set(d, "WM_DE", "none");
+        hub_set(d, "DISPLAY_MANAGER", "none");
+        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
+        hub_set(d, "AUDIO_STACK", "none");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "PRIV_ESCALATION", "doas");
+        hub_set(d, "EXTRAS", strcmp(variant, "Full") == 0 ? "git firewalld zram-tools tmux" : "git tmux");
+        hub_set(d, "QUICK_PROFILE", "Server");
+    } else if (strcmp(key, "QUICK_PROFILE_EMBEDDED") == 0) {
+        hub_set(d, "WM_DE", "none");
+        hub_set(d, "DISPLAY_MANAGER", "none");
+        hub_set(d, "NETWORK_STACK", "none");
+        hub_set(d, "AUDIO_STACK", "none");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "PRIV_ESCALATION", "none");
+        hub_set(d, "INIT", "busybox");
+        hub_set(d, "KERNEL_CHOICE", "linux-lts");
+        hub_set(d, "COREUTILS", "busybox");
+        hub_set(d, "POWER_USER", "yes");
+        hub_set(d, "KEEP_BINARY_KERNEL", "no");
+        hub_set(d, "EXTRAS", "");
+        hub_set(d, "QUICK_PROFILE", "Embedded");
+    } else if (strcmp(key, "QUICK_PROFILE_VOLK") == 0) {
+        hub_set(d, "WM_DE", "kde");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "X_STACK", "xlibre");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "EXTRAS", "git fastfetch tmux htop kitty firewalld flatpak");
+        hub_set(d, "KDE_PROFILE", "minimal");
+        hub_set(d, "INIT", "dinit");
+        hub_set(d, "PRIV_ESCALATION", "doas");
+        hub_set(d, "POWER_USER", "yes");
+        hub_set(d, "KEEP_BINARY_KERNEL", "no");
+        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
+        hub_set(d, "QUICK_PROFILE", "Volk");
+    } else if (strcmp(key, "QUICK_PROFILE_TESTING") == 0) {
+        hub_set(d, "FS_TYPE", "xfs");
+        hub_set(d, "BOOTLOADER", "limine");
+        hub_set(d, "KERNEL_CHOICE", "linux-cachyos-bore");
+        hub_set(d, "INIT", "s6");
+        hub_set(d, "PRIV_ESCALATION", "doas");
+        hub_set(d, "USE_LUKS", "yes");
+        hub_set(d, "USE_LVM", "yes");
+        hub_set(d, "GENERATE_UKI", "yes");
+        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
+        hub_set(d, "MICROCODE_OVERRIDE", "none");
+        hub_set(d, "COREUTILS", "busybox");
+        hub_set(d, "WM_DE", "mango");
+        hub_set(d, "DISPLAY_MANAGER", "lightdm");
+        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
+        hub_set(d, "AUDIO_STACK", "pipewire");
+        hub_set(d, "X_STACK", "none");
+        hub_set(d, "USER_SHELL", "fish");
+        hub_set(d, "EXTRAS", "git fastfetch tmux htop kitty firewalld flatpak");
+        hub_set(d, "QUICK_PROFILE", "TestingQP");
+    }
+    d->dirty = true;
+}
+
 static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
     int ow = (int)(area.w * 0.55f);
     int oh = (int)(area.h * 0.60f);
@@ -598,6 +768,9 @@ static EventResult hub_handle_edit_event(HubData *d, Event *ev) {
             case KEY_DOWN: if (d->edit_selected + 1 < item->choice_count) d->edit_selected++; d->dirty = true; return event_result_handled();
             case KEY_ENTER:
                 hub_set(d, item->id, item->choices[d->edit_selected]);
+                if (strncmp(item->id, "QUICK_PROFILE_", 14) == 0) {
+                    hub_apply_profile(d, item->id, item->choices[d->edit_selected]);
+                }
                 d->mode = HUB_BROWSING; d->dirty = true; return event_result_handled();
             default: return event_result_unhandled();
         }
@@ -610,6 +783,9 @@ static EventResult hub_handle_edit_event(HubData *d, Event *ev) {
             case KEY_ESC: d->mode = HUB_BROWSING; d->dirty = true; return event_result_handled();
             case KEY_ENTER:
                 hub_set(d, item->id, d->edit_text);
+                if (strncmp(item->id, "QUICK_PROFILE_", 14) == 0) {
+                    hub_apply_profile(d, item->id, d->edit_text);
+                }
                 d->mode = HUB_BROWSING; d->dirty = true; return event_result_handled();
             case KEY_CHAR: {
                 int len = strlen(d->edit_text);
