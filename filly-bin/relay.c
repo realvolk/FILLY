@@ -33,6 +33,9 @@ int relay_main(const char *sock_path) {
         perror("connect"); return 1;
     }
 
+    int tty_fd = open("/dev/tty", O_RDWR);
+    if (tty_fd < 0) return 1;
+
     char json[524288];
     int n = read(0, json, sizeof(json)-1);
     if (n <= 0) return 1;
@@ -40,18 +43,26 @@ int relay_main(const char *sock_path) {
     write(fd, json, n);
     write(fd, "\n", 1);
 
-    set_raw();
-    atexit(restore_term);
+    tcgetattr(tty_fd, &orig);
+    struct termios raw = orig;
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+    raw.c_cflag |= CS8;
+    raw.c_oflag &= ~OPOST;
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+    tcsetattr(tty_fd, TCSAFLUSH, &raw);
 
     char buf[65536];
     while (1) {
         fd_set rfds; FD_ZERO(&rfds);
-        FD_SET(0, &rfds); FD_SET(fd, &rfds);
-        select(fd+1, &rfds, NULL, NULL, NULL);
+        FD_SET(tty_fd, &rfds); FD_SET(fd, &rfds);
+        int maxfd = tty_fd > fd ? tty_fd : fd;
+        select(maxfd+1, &rfds, NULL, NULL, NULL);
 
-        if (FD_ISSET(0, &rfds)) {
+        if (FD_ISSET(tty_fd, &rfds)) {
             char ch;
-            if (read(0, &ch, 1) <= 0) break;
+            if (read(tty_fd, &ch, 1) <= 0) break;
             char header[32];
             int hl = snprintf(header, sizeof(header), "KEY %d %c\n", (int)ch, ch);
             write(fd, header, hl);
@@ -81,6 +92,6 @@ int relay_main(const char *sock_path) {
         }
     }
 done:
-    restore_term();
+    tcsetattr(tty_fd, TCSAFLUSH, &orig);
     return 0;
 }
