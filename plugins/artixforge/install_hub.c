@@ -100,7 +100,17 @@ static bool hub_visible(HubData *d, HubItem *item) {
     if (item->visible_if.count == 0) return true;
     for (int i = 0; i < item->visible_if.count; i++) {
         char *v = hub_get(d, item->visible_if.keys[i]);
-        if (!v || strcmp(v, item->visible_if.vals[i]) != 0) return false;
+        if (!v) return false;
+        char *cond = strdup(item->visible_if.vals[i]);
+        char *tok = strtok(cond, ",");
+        bool matched = false;
+        while (tok) {
+            while (*tok == ' ') tok++;
+            if (strcmp(v, tok) == 0) { matched = true; break; }
+            tok = strtok(NULL, ",");
+        }
+        free(cond);
+        if (!matched) return false;
     }
     return true;
 }
@@ -188,71 +198,6 @@ static void hub_update_filter(HubData *d, char **choices, int count) {
     }
     if (d->edit_selected >= d->edit_filtered_count)
         d->edit_selected = d->edit_filtered_count > 0 ? d->edit_filtered_count - 1 : 0;
-}
-
-static void hub_enter_edit(HubData *d, HubItem *item) {
-    char *current = hub_get(d, item->id);
-    if (!current) current = item->value;
-
-    if (item->disk_picker) {
-        item->widget = strdup("menu");
-        char *disks_json = get_disks();
-        cJSON *disks_arr = cJSON_Parse(disks_json);
-        free(disks_json);
-        if (disks_arr && disks_arr->type == cJSON_Array) {
-            free(item->choices);
-            item->choice_count = cJSON_GetArraySize(disks_arr);
-            item->choices = malloc(item->choice_count * sizeof(char *));
-            for (int i = 0; i < item->choice_count; i++)
-                item->choices[i] = strdup(cJSON_GetArrayItem(disks_arr, i)->valuestring);
-        }
-        if (disks_arr) cJSON_Delete(disks_arr);
-        current = item->choices && item->choice_count > 0 ? item->choices[0] : "";
-    }
-
-    if (strcmp(item->widget, "menu") == 0 || strcmp(item->widget, "filter") == 0) {
-        d->edit_selected = 0;
-        for (int i = 0; i < item->choice_count; i++) {
-            if (strcmp(item->choices[i], current) == 0) {
-                d->edit_selected = i;
-                break;
-            }
-        }
-        if (strcmp(item->widget, "filter") == 0) {
-            free(d->edit_query);
-            d->edit_query = strdup("");
-            hub_update_filter(d, item->choices, item->choice_count);
-            d->mode = HUB_EDITING_FILTER;
-        } else {
-            d->mode = HUB_EDITING_MENU;
-        }
-    } else if (strcmp(item->widget, "input") == 0) {
-        free(d->edit_text);
-        d->edit_text = strdup(current);
-        d->edit_cursor = strlen(d->edit_text);
-        d->mode = HUB_EDITING_INPUT;
-    } else if (strcmp(item->widget, "password") == 0 || strcmp(item->widget, "password_confirm") == 0) {
-        free(d->edit_pass1);
-        free(d->edit_pass2);
-        d->edit_pass1 = strdup("");
-        d->edit_pass2 = strdup("");
-        d->edit_pass_field = false;
-        d->mode = HUB_EDITING_PASSWORD;
-    } else if (strcmp(item->widget, "yesno") == 0) {
-        d->edit_yes = (strcmp(current, "yes") == 0);
-        d->mode = HUB_EDITING_YESNO;
-    } else if (strcmp(item->widget, "multiselect") == 0) {
-        free(d->edit_query);
-        d->edit_query = strdup("");
-        free(d->edit_selected_set);
-        d->edit_selected_set = calloc(item->choice_count, sizeof(bool));
-        d->edit_min_sel = 0;
-        d->edit_max_sel = item->choice_count;
-        hub_update_filter(d, item->choices, item->choice_count);
-        d->edit_selected = 0;
-        d->mode = HUB_EDITING_MULTISELECT;
-    }
-    d->dirty = true;
 }
 
 static void hub_apply_profile(HubData *d, const char *key, const char *variant) {
@@ -425,6 +370,71 @@ static void hub_apply_profile(HubData *d, const char *key, const char *variant) 
     d->dirty = true;
 }
 
+static void hub_enter_edit(HubData *d, HubItem *item) {
+    char *current = hub_get(d, item->id);
+    if (!current) current = item->value;
+
+    if (item->disk_picker) {
+        item->widget = strdup("menu");
+        char *disks_json = get_disks();
+        cJSON *disks_arr = cJSON_Parse(disks_json);
+        free(disks_json);
+        if (disks_arr && disks_arr->type == cJSON_Array) {
+            free(item->choices);
+            item->choice_count = cJSON_GetArraySize(disks_arr);
+            item->choices = malloc(item->choice_count * sizeof(char *));
+            for (int i = 0; i < item->choice_count; i++)
+                item->choices[i] = strdup(cJSON_GetArrayItem(disks_arr, i)->valuestring);
+        }
+        if (disks_arr) cJSON_Delete(disks_arr);
+        current = item->choices && item->choice_count > 0 ? item->choices[0] : "";
+    }
+
+    if (strcmp(item->widget, "menu") == 0 || strcmp(item->widget, "filter") == 0) {
+        d->edit_selected = 0;
+        for (int i = 0; i < item->choice_count; i++) {
+            if (strcmp(item->choices[i], current) == 0) {
+                d->edit_selected = i;
+                break;
+            }
+        }
+        if (strcmp(item->widget, "filter") == 0) {
+            free(d->edit_query);
+            d->edit_query = strdup("");
+            hub_update_filter(d, item->choices, item->choice_count);
+            d->mode = HUB_EDITING_FILTER;
+        } else {
+            d->mode = HUB_EDITING_MENU;
+        }
+    } else if (strcmp(item->widget, "input") == 0) {
+        free(d->edit_text);
+        d->edit_text = strdup(current);
+        d->edit_cursor = strlen(d->edit_text);
+        d->mode = HUB_EDITING_INPUT;
+    } else if (strcmp(item->widget, "password") == 0 || strcmp(item->widget, "password_confirm") == 0) {
+        free(d->edit_pass1);
+        free(d->edit_pass2);
+        d->edit_pass1 = strdup("");
+        d->edit_pass2 = strdup("");
+        d->edit_pass_field = false;
+        d->mode = HUB_EDITING_PASSWORD;
+    } else if (strcmp(item->widget, "yesno") == 0) {
+        d->edit_yes = (strcmp(current, "yes") == 0);
+        d->mode = HUB_EDITING_YESNO;
+    } else if (strcmp(item->widget, "multiselect") == 0) {
+        free(d->edit_query);
+        d->edit_query = strdup("");
+        free(d->edit_selected_set);
+        d->edit_selected_set = calloc(item->choice_count, sizeof(bool));
+        d->edit_min_sel = 0;
+        d->edit_max_sel = item->choice_count;
+        hub_update_filter(d, item->choices, item->choice_count);
+        d->edit_selected = 0;
+        d->mode = HUB_EDITING_MULTISELECT;
+    }
+    d->dirty = true;
+}
+
 static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
     int ow = (int)(area.w * 0.55f);
     int oh = (int)(area.h * 0.60f);
@@ -435,194 +445,263 @@ static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
 
     RenderTree *children = NULL;
     int child_count = 0;
-
     HubItem *item = hub_get_item(d, NULL);
+    const char *msg = item && item->message ? item->message : "";
+    int msg_lines = 0;
+    for (const char *p = msg; *p; p++) if (*p == '\n') msg_lines++;
+    int msg_h = strlen(msg) > 0 ? msg_lines + 1 : 0;
 
     switch (d->mode) {
     case HUB_EDITING_MENU: {
-        child_count = 3;
+        child_count = 3 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
-        children[1].type = RNODE_LIST;
-        children[1].rect = rect_new(1, 1, ow - 2, oh - 4);
-        children[1].list.item_count = item ? item->choice_count : 0;
-        children[1].list.items = item ? malloc(item->choice_count * sizeof(ListItem)) : NULL;
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int list_y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, 1, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            list_y = 1 + msg_h;
+        }
+        children[ci].type = RNODE_LIST;
+        children[ci].rect = rect_new(1, list_y, ow - 2, oh - list_y - 2);
+        children[ci].list.item_count = item ? item->choice_count : 0;
+        children[ci].list.items = item ? malloc(item->choice_count * sizeof(ListItem)) : NULL;
         if (item) for (int i = 0; i < item->choice_count; i++)
-            children[1].list.items[i] = listitem_new(item->choices[i]);
-        children[1].list.selected = d->edit_selected;
-        children[1].list.highlight = textstyle_selected();
-
-        children[2].type = RNODE_TEXT;
-        children[2].rect = rect_new(1, oh - 3, ow - 2, 1);
-        children[2].text.content = strdup("Up/Down:move  Enter:select  Esc:cancel");
-        children[2].text.align = ALIGN_CENTER;
-        children[2].text.style = textstyle_muted();
+            children[ci].list.items[i] = listitem_new(item->choices[i]);
+        children[ci].list.selected = d->edit_selected;
+        children[ci].list.highlight = textstyle_selected();
+        ci++;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup("Up/Down:move  Enter:select  Esc:cancel");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     case HUB_EDITING_INPUT: {
-        child_count = 3;
+        child_count = 3 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
-        children[1].type = RNODE_INPUT;
-        children[1].rect = rect_new(1, 2, ow - 2, 1);
-        children[1].input.text = d->edit_text ? strdup(d->edit_text) : strdup("");
-        children[1].input.cursor = d->edit_cursor;
-        children[1].input.placeholder = strdup("");
-        children[1].input.masked = false;
-
-        children[2].type = RNODE_TEXT;
-        children[2].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[2].text.content = strdup("Enter:confirm  Esc:cancel");
-        children[2].text.align = ALIGN_CENTER;
-        children[2].text.style = textstyle_muted();
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int input_y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, 1, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            input_y = 1 + msg_h;
+        }
+        children[ci].type = RNODE_INPUT;
+        children[ci].rect = rect_new(1, input_y, ow - 2, 1);
+        children[ci].input.text = d->edit_text ? strdup(d->edit_text) : strdup("");
+        children[ci].input.cursor = d->edit_cursor;
+        children[ci].input.placeholder = item && item->placeholder ? strdup(item->placeholder) : strdup("");
+        children[ci].input.masked = false;
+        ci++;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup("Enter:confirm  Esc:cancel");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     case HUB_EDITING_PASSWORD: {
-        child_count = 4;
+        child_count = 4 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, y, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            y += msg_h;
+        }
         char mask1[128] = {0};
         for (int j = 0; j < (int)strlen(d->edit_pass1) && j < 127; j++) mask1[j] = '*';
-        children[1].type = RNODE_TEXT;
-        children[1].rect = rect_new(1, 2, ow - 2, 1);
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, y, ow - 2, 1);
         char buf[256];
         snprintf(buf, sizeof(buf), "Password: %s", mask1);
-        children[1].text.content = strdup(buf);
-        children[1].text.align = ALIGN_LEFT;
-        children[1].text.style = d->edit_pass_field ? textstyle_normal() : textstyle_selected();
-
+        children[ci].text.content = strdup(buf);
+        children[ci].text.align = ALIGN_LEFT;
+        children[ci].text.style = d->edit_pass_field ? textstyle_normal() : textstyle_selected();
+        ci++; y++;
         char mask2[128] = {0};
         for (int j = 0; j < (int)strlen(d->edit_pass2) && j < 127; j++) mask2[j] = '*';
-        children[2].type = RNODE_TEXT;
-        children[2].rect = rect_new(1, 3, ow - 2, 1);
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, y, ow - 2, 1);
         snprintf(buf, sizeof(buf), "Confirm:  %s", mask2);
-        children[2].text.content = strdup(buf);
-        children[2].text.align = ALIGN_LEFT;
-        children[2].text.style = d->edit_pass_field ? textstyle_selected() : textstyle_normal();
-
-        children[3].type = RNODE_TEXT;
-        children[3].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[3].text.content = strdup("Tab:next  Enter:submit  Esc:cancel");
-        children[3].text.align = ALIGN_CENTER;
-        children[3].text.style = textstyle_muted();
+        children[ci].text.content = strdup(buf);
+        children[ci].text.align = ALIGN_LEFT;
+        children[ci].text.style = d->edit_pass_field ? textstyle_selected() : textstyle_normal();
+        ci++; y++;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup("Tab:next  Enter:submit  Esc:cancel");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     case HUB_EDITING_YESNO: {
-        child_count = 3;
+        child_count = 3 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, y, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            y += msg_h;
+        }
         char yesno_text[64];
         snprintf(yesno_text, sizeof(yesno_text), "[ %s ]  [ %s ]",
             d->edit_yes ? "Yes" : "yes", d->edit_yes ? "no" : "No");
-        children[1].type = RNODE_TEXT;
-        children[1].rect = rect_new(1, 3, ow - 2, 1);
-        children[1].text.content = strdup(yesno_text);
-        children[1].text.align = ALIGN_CENTER;
-        children[1].text.style = textstyle_accent();
-
-        children[2].type = RNODE_TEXT;
-        children[2].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[2].text.content = strdup("Left/Right:choose  Enter:confirm  y/n:quick  Esc:cancel");
-        children[2].text.align = ALIGN_CENTER;
-        children[2].text.style = textstyle_muted();
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, y + 1, ow - 2, 1);
+        children[ci].text.content = strdup(yesno_text);
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_accent();
+        ci++;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup("Left/Right:choose  Enter:confirm  y/n:quick  Esc:cancel");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     case HUB_EDITING_FILTER: {
-        child_count = 4;
+        child_count = 4 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
-        children[1].type = RNODE_INPUT;
-        children[1].rect = rect_new(1, 1, ow - 2, 1);
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, y, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            y += msg_h;
+        }
+        children[ci].type = RNODE_INPUT;
+        children[ci].rect = rect_new(1, y, ow - 2, 1);
         char query_display[256];
         snprintf(query_display, sizeof(query_display), "> %s", d->edit_query ? d->edit_query : "");
-        children[1].input.text = strdup(query_display);
-        children[1].input.cursor = strlen(query_display);
-        children[1].input.placeholder = strdup("Type to filter...");
-        children[1].input.masked = false;
-
-        children[2].type = RNODE_LIST;
-        children[2].rect = rect_new(1, 2, ow - 2, oh - 5);
-        children[2].list.item_count = d->edit_filtered_count;
-        children[2].list.items = malloc(d->edit_filtered_count * sizeof(ListItem));
+        children[ci].input.text = strdup(query_display);
+        children[ci].input.cursor = strlen(query_display);
+        children[ci].input.placeholder = strdup("Type to filter...");
+        children[ci].input.masked = false;
+        ci++; y++;
+        children[ci].type = RNODE_LIST;
+        children[ci].rect = rect_new(1, y, ow - 2, oh - y - 2);
+        children[ci].list.item_count = d->edit_filtered_count;
+        children[ci].list.items = malloc(d->edit_filtered_count * sizeof(ListItem));
         for (int i = 0; i < d->edit_filtered_count; i++)
-            children[2].list.items[i] = listitem_new(item->choices[d->edit_filtered[i]]);
-        children[2].list.selected = d->edit_selected;
-        children[2].list.highlight = textstyle_selected();
-
-        children[3].type = RNODE_TEXT;
-        children[3].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[3].text.content = strdup("Type:filter  Up/Down:move  Enter:select  Esc:cancel");
-        children[3].text.align = ALIGN_CENTER;
-        children[3].text.style = textstyle_muted();
+            children[ci].list.items[i] = listitem_new(item->choices[d->edit_filtered[i]]);
+        children[ci].list.selected = d->edit_selected;
+        children[ci].list.highlight = textstyle_selected();
+        ci++;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup("Type:filter  Up/Down:move  Enter:select  Esc:cancel");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     case HUB_EDITING_MULTISELECT: {
-        child_count = 4;
+        child_count = 4 + (msg_h > 0 ? 1 : 0);
         children = calloc(child_count, sizeof(RenderTree));
-        children[0].type = RNODE_TEXT;
-        children[0].rect = rect_new(1, 0, ow - 2, 1);
-        children[0].text.content = item ? strdup(item->label) : strdup("");
-        children[0].text.align = ALIGN_CENTER;
-        children[0].text.style = textstyle_selected();
-
-        children[1].type = RNODE_INPUT;
-        children[1].rect = rect_new(1, 1, ow - 2, 1);
+        int ci = 0;
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, 0, ow - 2, 1);
+        children[ci].text.content = item ? strdup(item->label) : strdup("");
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_selected();
+        ci++;
+        int y = 1;
+        if (msg_h > 0) {
+            children[ci].type = RNODE_TEXT;
+            children[ci].rect = rect_new(1, y, ow - 2, msg_h);
+            children[ci].text.content = strdup(msg);
+            children[ci].text.align = ALIGN_LEFT;
+            children[ci].text.style = textstyle_normal();
+            ci++;
+            y += msg_h;
+        }
+        children[ci].type = RNODE_INPUT;
+        children[ci].rect = rect_new(1, y, ow - 2, 1);
         char qd[256];
         snprintf(qd, sizeof(qd), "> %s", d->edit_query ? d->edit_query : "");
-        children[1].input.text = strdup(qd);
-        children[1].input.cursor = strlen(qd);
-        children[1].input.placeholder = strdup("Type to filter...");
-        children[1].input.masked = false;
-
-        children[2].type = RNODE_LIST;
-        children[2].rect = rect_new(1, 2, ow - 2, oh - 5);
-        children[2].list.item_count = d->edit_filtered_count;
-        children[2].list.items = malloc(d->edit_filtered_count * sizeof(ListItem));
+        children[ci].input.text = strdup(qd);
+        children[ci].input.cursor = strlen(qd);
+        children[ci].input.placeholder = strdup("Type to filter...");
+        children[ci].input.masked = false;
+        ci++; y++;
+        children[ci].type = RNODE_LIST;
+        children[ci].rect = rect_new(1, y, ow - 2, oh - y - 2);
+        children[ci].list.item_count = d->edit_filtered_count;
+        children[ci].list.items = malloc(d->edit_filtered_count * sizeof(ListItem));
         for (int i = 0; i < d->edit_filtered_count; i++) {
             int orig = d->edit_filtered[i];
             char label[512];
             snprintf(label, sizeof(label), "%s %s",
                 d->edit_selected_set[orig] ? "[x]" : "[ ]", item->choices[orig]);
-            children[2].list.items[i] = listitem_new(label);
+            children[ci].list.items[i] = listitem_new(label);
         }
-        children[2].list.selected = d->edit_selected;
-        children[2].list.highlight = textstyle_selected();
-
+        children[ci].list.selected = d->edit_selected;
+        children[ci].list.highlight = textstyle_selected();
+        ci++;
         int sel_count = 0;
         for (int i = 0; i < item->choice_count; i++)
             if (d->edit_selected_set[i]) sel_count++;
         char footer[256];
         snprintf(footer, sizeof(footer), "%d selected  Space:toggle  Enter:confirm  Esc:cancel", sel_count);
-        children[3].type = RNODE_TEXT;
-        children[3].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[3].text.content = strdup(footer);
-        children[3].text.align = ALIGN_CENTER;
-        children[3].text.style = textstyle_muted();
+        children[ci].type = RNODE_TEXT;
+        children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
+        children[ci].text.content = strdup(footer);
+        children[ci].text.align = ALIGN_CENTER;
+        children[ci].text.style = textstyle_muted();
         break;
     }
     default: break;
