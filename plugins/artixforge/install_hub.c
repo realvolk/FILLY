@@ -900,10 +900,42 @@ Widget *install_hub_factory(const WidgetRequest *req) {
                 cJSON *iw = cJSON_GetObjectItem(item_val, "widget");
                 item->widget = iw && iw->valuestring ? strdup(iw->valuestring) : strdup("menu");
                 cJSON *ich = cJSON_GetObjectItem(item_val, "choices");
-                item->choice_count = ich ? cJSON_GetArraySize(ich) : 0;
-                item->choices = item->choice_count > 0 ? malloc(item->choice_count * sizeof(char *)) : NULL;
-                for (int j = 0; j < item->choice_count; j++)
-                    item->choices[j] = strdup(cJSON_GetArrayItem(ich, j)->valuestring);
+                cJSON *ichf = cJSON_GetObjectItem(item_val, "choices_file");
+                item->choice_count = 0;
+                item->choices = NULL;
+
+                if (ich && ich->type == cJSON_Array) {
+                    item->choice_count = cJSON_GetArraySize(ich);
+                    item->choices = item->choice_count > 0 ? malloc(item->choice_count * sizeof(char *)) : NULL;
+                    for (int j = 0; j < item->choice_count; j++)
+                        item->choices[j] = strdup(cJSON_GetArrayItem(ich, j)->valuestring);
+                } else if (ichf && ichf->valuestring) {
+                    char filepath[1024];
+                    snprintf(filepath, sizeof(filepath), "/tmp/artix-installer/filly-data/%s", ichf->valuestring);
+                    FILE *fp = fopen(filepath, "r");
+                    if (fp) {
+                        char line[4096];
+                        int cap = 64;
+                        item->choices = malloc(cap * sizeof(char *));
+                        item->choice_count = 0;
+                        while (fgets(line, sizeof(line), fp)) {
+                            line[strcspn(line, "\n")] = 0;
+                            if (strlen(line) == 0) continue;
+                            if (item->choice_count >= cap) {
+                                cap *= 2;
+                                item->choices = realloc(item->choices, cap * sizeof(char *));
+                            }
+                            item->choices[item->choice_count++] = strdup(line);
+                        }
+                        fclose(fp);
+                    }
+                    if (item->choice_count == 0) {
+                        item->choices = malloc(sizeof(char *));
+                        item->choices[0] = strdup("(no data)");
+                        item->choice_count = 1;
+                    }
+                }
+
                 cJSON *ip = cJSON_GetObjectItem(item_val, "placeholder");
                 item->placeholder = ip && ip->valuestring ? strdup(ip->valuestring) : strdup("");
                 cJSON *im = cJSON_GetObjectItem(item_val, "message");
