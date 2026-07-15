@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.2.1 (2026-07-15) — FILLY
+
+### Changed
+- **Daemon TTY passthrough** — daemon now accepts a `tty` field in widget requests, opening the client's terminal instead of `/dev/tty`; interactive widgets render on and read keystrokes from the correct terminal
+- `terminal_backend_init` signature changed to accept `tty_path` parameter; callers pass `NULL` for default `/dev/tty` behavior
+- `WidgetRequest` struct extended with `tty` field; parsed and freed alongside other fields
+- `load_plugins` moved to `daemon.h` and made non-static for reuse by oneshot mode
+- Plugin directory changed from `~/.config/filly/plugins/` to `$HOME/.config/filly/plugins/` — resolves correctly under `sudo` where `$HOME` is `/root`
+- Binary linked with `-rdynamic` to export symbols for plugin resolution
+
+### Added
+- `choices_file` support in hub items — reads choice lists from `/tmp/artix-installer/filly-data/` files instead of embedding large JSON arrays
+- Data file generation in installer `menu.sh` — kernels, extras, timezones, locales, keymaps written to disk before hub launch, eliminating JSON payload size limits
+- Plugin load error logging — `dlerror()` output printed to stderr on `dlopen` or `dlsym` failure
+- Daemon read buffer increased to 512KB for large hub JSON payloads
+- Calendar widget month/year and day-of-week headers centered within the box width
+- Split panes dismiss with ESC and switch active pane with F1/F2
+- Text editor receives Home/End/PageUp/PageDown/Delete key support, Ctrl+S save, Ctrl+D delete line, visible inverse-video cursor block, and multiline content splitting
+- Gauge bar uses safe ASCII `=`/`-` characters across all locales
+- Color picker converts RGB to nearest ANSI 256-color palette entry
+
+### Fixed
+- Container interior cleared with `fill_rect` after border draw, preventing border character bleed-through into centered text
+- Text lines padded to full width after drawing, eliminating trailing border artifacts
+- `textstyle_selected` given a background color so title text covers the border line beneath it
+- Terminal corruption on exit — alt screen and raw mode teardown made idempotent, called once per session
+- F-key parsing — CSI sequences with multi-digit parameters correctly mapped to F1-F12
+- ESC key detection — lone ESC distinguished from escape sequence prefixes via inter-byte timeout
+- Daemon segfault — `Backend.data` initialized to `&t` instead of garbage stack memory
+- Daemon plugin loading — `$HOME` resolution under `sudo` now finds `/root/.config/filly/plugins/`
+- Daemon socket buffer overflow — increased to 512KB
+- Form widget factory properly implemented with keyboard input, Tab/Shift+Tab navigation, Enter to submit
+- Tabs, split panes, and tree widget factories implemented — previously returned NULL stubs
+- Yes/No prompt in installer GUI detection — now calls `filly_yesno` directly, avoiding stale `FILLY_BACKEND` env var leaks
+- `FILLY_BACKEND` explicitly set to `tui` before GUI prompt, preventing premature GUI function calls
+- GUI backend validation — checks for `filly_graphical.sh` and `base.py` existence before enabling GUI mode
+- Notification message vertically centered in toast box
+- Badge and spinner widgets dismiss on keypress/ESC to allow demo progression
+- Range slider bar width calculation fixed; percentage display added
+- Color picker uses ANSI 256-color conversion instead of malformed hex escape sequences
+- Toggle widget switch line centered
+- `install_hub` communicates with daemon via `socat` for reliable bidirectional Unix socket transfer
+
 ## v0.2.0 (2026-07-13) — FILLY
 
 ### Changed

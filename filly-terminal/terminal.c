@@ -186,24 +186,31 @@ BackendVTable terminal_vtable = {
     .get_size = term_get_size,
 };
 
-bool terminal_backend_init(TerminalBackend *t) {
-    t->tty_fd = open("/dev/tty", O_RDWR);
+bool terminal_backend_init(TerminalBackend *t, const char *tty_path) {
+    if (tty_path && strlen(tty_path) > 0) {
+        t->tty_fd = open(tty_path, O_RDWR);
+    } else {
+        t->tty_fd = open("/dev/tty", O_RDWR);
+    }
     if (t->tty_fd < 0) return false;
     t->raw_mode = false;
     t->alt_screen = false;
     t->session_active = false;
+    t->tty_path = tty_path ? strdup(tty_path) : strdup("/dev/tty");
     return true;
 }
 
 void terminal_backend_destroy(TerminalBackend *t) {
     if (t->tty_fd >= 0) close(t->tty_fd);
+    free(t->tty_path);
 }
 
 Backend *terminal_backend_new(void) {
     TerminalBackend *t = malloc(sizeof(TerminalBackend));
     if (!t) return NULL;
-    if (!terminal_backend_init(t)) { free(t); return NULL; }
+    if (!terminal_backend_init(t, NULL)) { free(t); return NULL; }
     Backend *b = malloc(sizeof(Backend));
     b->vtable = &terminal_vtable;
+    b->data = t;
     return b;
 }

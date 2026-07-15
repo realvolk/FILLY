@@ -499,7 +499,7 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         register_builtin_widgets();
         TerminalBackend t;
-        terminal_backend_init(&t);
+        terminal_backend_init(&t, NULL);
         Backend backend = { .vtable = &terminal_vtable, .data = &t };
         Widget *w = msg_widget_new("FILLY", "No command given. Try 'filly demo'.");
         session_run(w, &backend);
@@ -547,7 +547,7 @@ int main(int argc, char **argv) {
         Widget *w = widget_registry_create(req);
         if (!w) { fprintf(stderr, "Unknown widget: %s\n", req->widget); widget_request_free(req); return 1; }
         TerminalBackend t;
-        terminal_backend_init(&t);
+        terminal_backend_init(&t, NULL);
         Backend backend = { .vtable = &terminal_vtable, .data = &t };
         WidgetResponse resp = session_run(w, &backend);
         char *out = widget_response_to_json(&resp);
@@ -561,7 +561,7 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "demo") == 0) {
         TerminalBackend t;
-        terminal_backend_init(&t);
+        terminal_backend_init(&t, NULL);
         Backend backend = { .vtable = &terminal_vtable, .data = &t };
         Widget *w;
 

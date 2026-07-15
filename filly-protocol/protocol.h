@@ -8,6 +8,7 @@ typedef struct {
     int step;
     int total;
     char *session_id;
+    char *tty;
 } WidgetRequest;
 
 typedef struct {

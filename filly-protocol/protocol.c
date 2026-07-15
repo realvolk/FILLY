@@ -16,6 +16,8 @@ WidgetRequest *widget_request_parse(const char *json_str) {
     if (t) req->total = t->valueint;
     cJSON *sid = cJSON_GetObjectItem(root, "session_id");
     if (sid && sid->valuestring) req->session_id = strdup(sid->valuestring);
+    cJSON *tty = cJSON_GetObjectItem(root, "tty");
+    if (tty && tty->valuestring) req->tty = strdup(tty->valuestring);
     cJSON_Delete(root);
     return req;
 }
@@ -25,6 +27,7 @@ void widget_request_free(WidgetRequest *req) {
     free(req->widget);
     if (req->params) cJSON_Delete(req->params);
     free(req->session_id);
+    free(req->tty);
     free(req);
 }
 

@@ -16,7 +16,7 @@ extern BackendVTable terminal_vtable;
 #include <dirent.h>
 #include <dlfcn.h>
 
-static void load_plugins(void) {
+void load_plugins(void) {
     const char *home = getenv("HOME");
     if (!home) return;
     char path[1024];
@@ -35,11 +35,7 @@ static void load_plugins(void) {
                 *(void **)(&reg) = dlsym(lib, "register_plugins");
                 if (reg) {
                     reg(widget_registry_register);
-                } else {
-                    fprintf(stderr, "Plugin %s: missing register_plugins symbol\n", entry->d_name);
                 }
-            } else {
-                fprintf(stderr, "Failed to load plugin %s: %s\n", entry->d_name, dlerror());
             }
         }
     }
@@ -49,10 +45,9 @@ static void load_plugins(void) {
 static void *handle_client(void *arg) {
     int fd = (intptr_t)arg;
     TerminalBackend t;
-    terminal_backend_init(&t);
-    Backend backend = { .vtable = &terminal_vtable, .data = &t };
+    char buf[524288];
+    bool backend_ready = false;
 
-    char buf[524288];  // 512KB
     while (1) {
         int n = 0;
         while (n < (int)sizeof(buf) - 1) {
@@ -78,6 +73,20 @@ static void *handle_client(void *arg) {
             widget_request_free(req);
             break;
         }
+
+        if (!backend_ready) {
+            if (!terminal_backend_init(&t, req->tty)) {
+                WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "No terminal available" };
+                char *json = widget_response_to_json(&resp);
+                write(fd, json, strlen(json)); write(fd, "\n", 1);
+                free(json);
+                widget_request_free(req);
+                continue;
+            }
+            backend_ready = true;
+        }
+
+        Backend backend = { .vtable = &terminal_vtable, .data = &t };
         Widget *w = widget_registry_create(req);
         WidgetResponse resp;
         if (w) {
@@ -94,7 +103,7 @@ static void *handle_client(void *arg) {
         widget_request_free(req);
     }
 done:
-    terminal_backend_destroy(&t);
+    if (backend_ready) terminal_backend_destroy(&t);
     close(fd);
     return NULL;
 }
