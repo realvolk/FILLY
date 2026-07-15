@@ -144,7 +144,7 @@ static void *handle_client(void *arg) {
             break;
         }
 
-        socket_mode = (req->params && cJSON_GetObjectItem(req->params, "relay"));
+        socket_mode = req->relay;
 
         if (socket_mode) {
             backend.vtable = &socket_vtable;
