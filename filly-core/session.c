@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "session.h"
+#include "render.h"
 #include <stdlib.h>
 
 WidgetResponse session_run(Widget *w, Backend *backend) {
@@ -14,6 +15,7 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             memset(&tree, 0, sizeof(tree));
             w->vtable.render(w, rect_new(0, 0, term_w, term_h), &tree);
             backend->vtable->draw(backend->data, &tree);
+            render_tree_free(&tree);
             w->vtable.clear_dirty(w);
         }
         Event ev = backend->vtable->next_event(backend->data);

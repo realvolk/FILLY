@@ -175,3 +175,4 @@ TextStyle textstyle_selected(void);
 Rect rect_new(int x, int y, int w, int h);
 EdgeInsets edgeinsets_zero(void);
 ListItem listitem_new(const char *label);
+void render_tree_free(RenderTree *tree);

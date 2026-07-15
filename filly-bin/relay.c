@@ -84,6 +84,8 @@ int relay_main(const char *sock_path) {
                 }
                 write(1, buf, len);
                 read(fd, buf, 1);
+            } else if (strncmp(line, "SIZE ", 5) == 0) {
+                /* ignore */
             } else {
                 write(1, line, strlen(line));
                 write(1, "\n", 1);
