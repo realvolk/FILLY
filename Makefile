@@ -4,6 +4,7 @@ LDFLAGS = -ldl -lpthread -lm -rdynamic
 PREFIX = /usr/local
 
 SRCS = filly-bin/main.c \
+       filly-bin/relay.c \
        filly-protocol/protocol.c \
        filly-core/render.c \
        filly-core/widget.c \

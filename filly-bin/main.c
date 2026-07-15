@@ -76,8 +76,8 @@ extern Widget *rich_text_widget_factory(const WidgetRequest *req);
 extern Widget *tooltip_widget_factory(const WidgetRequest *req);
 extern Widget *hub_widget_factory(const WidgetRequest *req);
 extern BackendVTable terminal_vtable;
+extern int relay_main(const char *sock_path);
 
-/* ---------- dummy pane that never dismisses ---------- */
 typedef struct {
     char *title;
     char *text;
@@ -690,6 +690,13 @@ int main(int argc, char **argv) {
 
         terminal_backend_destroy(&t);
         return 0;
+    }
+
+    if (strcmp(argv[1], "relay") == 0) {
+        load_plugins();
+        const char *sock = "/tmp/filly.sock";
+        if (argc > 2) sock = argv[2];
+        return relay_main(sock);
     }
 
     print_usage();

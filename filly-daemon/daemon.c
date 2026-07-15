@@ -4,6 +4,7 @@ extern BackendVTable terminal_vtable;
 #include "daemon.h"
 #include "../filly-protocol/protocol.h"
 #include "../filly-terminal/terminal.h"
+#include "../filly-terminal/renderer.h"
 #include "../filly-core/session.h"
 #include "../filly-core/widget.h"
 #include <stdio.h>
@@ -15,6 +16,73 @@ extern BackendVTable terminal_vtable;
 #include <sys/un.h>
 #include <dirent.h>
 #include <dlfcn.h>
+
+typedef struct {
+    int fd;
+    int term_w, term_h;
+} SocketBackend;
+
+static bool sock_setup(void *self) { (void)self; return true; }
+
+static bool sock_draw(void *self, RenderTree *tree) {
+    SocketBackend *s = (SocketBackend *)self;
+    int w = s->term_w, h = s->term_h;
+    char buf[65536];
+    render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
+    int len = strlen(buf);
+    char header[64];
+    int hl = snprintf(header, sizeof(header), "DRAW %d\n", len);
+    write(s->fd, header, hl);
+    write(s->fd, buf, len);
+    write(s->fd, "\n", 1);
+    return true;
+}
+
+static Event sock_next_event(void *self) {
+    SocketBackend *s = (SocketBackend *)self;
+    char line[256];
+    int i = 0;
+    while (i < (int)sizeof(line)-1) {
+        if (read(s->fd, line+i, 1) <= 0) { Event ev = {0}; return ev; }
+        if (line[i] == '\n') { line[i] = '\0'; break; }
+        i++;
+    }
+    Event ev = { .type = EVENT_NONE };
+    if (strncmp(line, "KEY ", 4) == 0) {
+        int code; char ch;
+        if (sscanf(line+4, "%d %c", &code, &ch) == 2) {
+            ev.type = EVENT_KEY;
+            ev.code = (KeyCode)code;
+            ev.ch = ch;
+        } else if (sscanf(line+4, "%d", &code) == 1) {
+            ev.type = EVENT_KEY;
+            ev.code = (KeyCode)code;
+            ev.ch = 0;
+        }
+    } else if (strncmp(line, "SIZE ", 5) == 0) {
+        int w, h;
+        if (sscanf(line+5, "%d %d", &w, &h) == 2) {
+            s->term_w = w; s->term_h = h;
+            ev.type = EVENT_RESIZE; ev.w = w; ev.h = h;
+        }
+    }
+    return ev;
+}
+
+static bool sock_teardown(void *self) { (void)self; return true; }
+
+static void sock_get_size(void *self, int *w, int *h) {
+    SocketBackend *s = (SocketBackend *)self;
+    *w = s->term_w; *h = s->term_h;
+}
+
+static BackendVTable socket_vtable = {
+    .setup = sock_setup,
+    .draw = sock_draw,
+    .next_event = sock_next_event,
+    .teardown = sock_teardown,
+    .get_size = sock_get_size,
+};
 
 void load_plugins(void) {
     const char *home = getenv("HOME");
@@ -33,9 +101,7 @@ void load_plugins(void) {
             if (lib) {
                 void (*reg)(void (*)(const char *, WidgetFactory));
                 *(void **)(&reg) = dlsym(lib, "register_plugins");
-                if (reg) {
-                    reg(widget_registry_register);
-                }
+                if (reg) reg(widget_registry_register);
             }
         }
     }
@@ -44,9 +110,11 @@ void load_plugins(void) {
 
 static void *handle_client(void *arg) {
     int fd = (intptr_t)arg;
-    TerminalBackend t;
     char buf[524288];
-    bool backend_ready = false;
+    bool term_ready = false, socket_mode = false;
+    TerminalBackend t;
+    SocketBackend sb = { .fd = fd, .term_w = 80, .term_h = 24 };
+    Backend backend;
 
     while (1) {
         int n = 0;
@@ -57,6 +125,7 @@ static void *handle_client(void *arg) {
             n++;
         }
         if (n == 0) break;
+
         WidgetRequest *req = widget_request_parse(buf);
         if (!req) {
             WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "Invalid JSON" };
@@ -65,6 +134,7 @@ static void *handle_client(void *arg) {
             free(json);
             continue;
         }
+
         if (strcmp(req->widget, "quit") == 0) {
             WidgetResponse resp = { .result = NULL, .cancelled = false, .error = NULL };
             char *json = widget_response_to_json(&resp);
@@ -74,22 +144,35 @@ static void *handle_client(void *arg) {
             break;
         }
 
-        if (!backend_ready) {
-            if (!terminal_backend_init(&t, req->tty)) {
-                WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "No terminal available" };
-                char *json = widget_response_to_json(&resp);
-                write(fd, json, strlen(json)); write(fd, "\n", 1);
-                free(json);
-                widget_request_free(req);
-                continue;
+        socket_mode = (req->params && cJSON_GetObjectItem(req->params, "relay"));
+
+        if (socket_mode) {
+            backend.vtable = &socket_vtable;
+            backend.data = &sb;
+        } else {
+            if (!term_ready) {
+                if (!terminal_backend_init(&t, NULL)) {
+                    WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "No terminal" };
+                    char *json = widget_response_to_json(&resp);
+                    write(fd, json, strlen(json)); write(fd, "\n", 1);
+                    free(json);
+                    widget_request_free(req);
+                    continue;
+                }
+                term_ready = true;
             }
-            backend_ready = true;
+            backend.vtable = &terminal_vtable;
+            backend.data = &t;
         }
 
-        Backend backend = { .vtable = &terminal_vtable, .data = &t };
         Widget *w = widget_registry_create(req);
         WidgetResponse resp;
         if (w) {
+            if (socket_mode) {
+                char init[32];
+                int l = snprintf(init, sizeof(init), "SIZE 80 24\n");
+                write(fd, init, l);
+            }
             resp = session_run(w, &backend);
             widget_destroy(w);
         } else {
@@ -97,13 +180,16 @@ static void *handle_client(void *arg) {
             resp.cancelled = true;
             resp.error = "Unknown widget";
         }
+
         char *json = widget_response_to_json(&resp);
         write(fd, json, strlen(json)); write(fd, "\n", 1);
         free(json);
         widget_request_free(req);
+
+        if (socket_mode) break;
     }
 done:
-    if (backend_ready) terminal_backend_destroy(&t);
+    if (term_ready && !socket_mode) terminal_backend_destroy(&t);
     close(fd);
     return NULL;
 }
