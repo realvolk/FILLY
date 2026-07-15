@@ -50,7 +50,7 @@ static void *handle_client(void *arg) {
     int fd = (intptr_t)arg;
     TerminalBackend t;
     terminal_backend_init(&t);
-    Backend backend = { .vtable = &terminal_vtable };
+    Backend backend = { .vtable = &terminal_vtable, .data = &t };
 
     char buf[524288];  // 512KB
     while (1) {
