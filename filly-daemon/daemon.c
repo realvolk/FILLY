@@ -86,23 +86,39 @@ static BackendVTable socket_vtable = {
 
 void load_plugins(void) {
     const char *home = getenv("HOME");
-    if (!home) return;
+    if (!home) {
+        fprintf(stderr, "load_plugins: HOME not set\n");
+        return;
+    }
     char path[1024];
     snprintf(path, sizeof(path), "%s/.config/filly/plugins", home);
+    fprintf(stderr, "load_plugins: scanning %s\n", path);
     DIR *d = opendir(path);
-    if (!d) return;
+    if (!d) {
+        fprintf(stderr, "load_plugins: cannot open %s\n", path);
+        return;
+    }
     struct dirent *entry;
     while ((entry = readdir(d))) {
         int len = strlen(entry->d_name);
         if (len > 3 && strcmp(entry->d_name + len - 3, ".so") == 0) {
             char full[2048];
             snprintf(full, sizeof(full), "%s/%s", path, entry->d_name);
+            fprintf(stderr, "load_plugins: loading %s\n", full);
             void *lib = dlopen(full, RTLD_NOW);
-            if (lib) {
-                void (*reg)(void (*)(const char *, WidgetFactory));
-                *(void **)(&reg) = dlsym(lib, "register_plugins");
-                if (reg) reg(widget_registry_register);
+            if (!lib) {
+                fprintf(stderr, "load_plugins: dlopen failed for %s: %s\n", full, dlerror());
+                continue;
             }
+            void (*reg)(void (*)(const char *, WidgetFactory));
+            *(void **)(&reg) = dlsym(lib, "register_plugins");
+            if (!reg) {
+                fprintf(stderr, "load_plugins: dlsym failed for %s: %s\n", full, dlerror());
+                dlclose(lib);
+                continue;
+            }
+            reg(widget_registry_register);
+            fprintf(stderr, "load_plugins: %s loaded successfully\n", full);
         }
     }
     closedir(d);
