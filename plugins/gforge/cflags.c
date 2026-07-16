@@ -31,6 +31,7 @@ static void cf_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult cf_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     CFData *d = (CFData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -62,11 +63,16 @@ Widget *cflags_factory(const WidgetRequest *req) {
     w->vtable.render = cf_render; w->vtable.handle_event = cf_handle;
     w->vtable.is_dirty = cf_dirty; w->vtable.clear_dirty = cf_clear; w->vtable.destroy = cf_destroy;
     CFData *d = (CFData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "CFLAGS");
-    d->cflags = strdup(cJSON_GetObjectItem(req->params, "CFLAGS")->valuestring ?: "");
-    d->cxxflags = strdup(cJSON_GetObjectItem(req->params, "CXXFLAGS")->valuestring ?: "");
-    d->makeopts = strdup(cJSON_GetObjectItem(req->params, "MAKEOPTS")->valuestring ?: "");
-    d->rustflags = strdup(cJSON_GetObjectItem(req->params, "RUSTFLAGS")->valuestring ?: "");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    cJSON *cflags_j = cJSON_GetObjectItem(req->params, "CFLAGS");
+    cJSON *cxx_j = cJSON_GetObjectItem(req->params, "CXXFLAGS");
+    cJSON *make_j = cJSON_GetObjectItem(req->params, "MAKEOPTS");
+    cJSON *rust_j = cJSON_GetObjectItem(req->params, "RUSTFLAGS");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "CFLAGS");
+    d->cflags = strdup(cflags_j && cflags_j->valuestring ? cflags_j->valuestring : "");
+    d->cxxflags = strdup(cxx_j && cxx_j->valuestring ? cxx_j->valuestring : "");
+    d->makeopts = strdup(make_j && make_j->valuestring ? make_j->valuestring : "");
+    d->rustflags = strdup(rust_j && rust_j->valuestring ? rust_j->valuestring : "");
     d->field = 0; d->dirty = true;
     return w;
 }

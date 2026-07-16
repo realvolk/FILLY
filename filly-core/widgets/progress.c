@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 typedef struct {
     char *title;
@@ -124,6 +125,7 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult progress_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     ProgressData *d = (ProgressData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_handled();
     switch (ev->code) {

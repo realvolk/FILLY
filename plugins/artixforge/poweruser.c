@@ -110,6 +110,7 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult pw_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     PWData *d = (PWData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 
@@ -133,7 +134,6 @@ static EventResult pw_handle(Widget *self, Event *ev, Backend *backend) {
         case KEY_ENTER:
             if (d->cat_count > 0 && d->item_idx < d->item_counts[d->cat_idx]) {
                 char *id = d->item_ids[d->cat_idx][d->item_idx];
-                char *val = pw_get(d, id);
                 return event_result_response((WidgetResponse){ .result = cJSON_CreateString(id), .cancelled = false, .error = NULL });
             }
             return event_result_handled();
@@ -162,7 +162,8 @@ Widget *poweruser_factory(const WidgetRequest *req) {
     w->vtable.render = pw_render; w->vtable.handle_event = pw_handle;
     w->vtable.is_dirty = pw_is_dirty; w->vtable.clear_dirty = pw_clear_dirty; w->vtable.destroy = pw_destroy;
     PWData *d = (PWData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Power User");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Power User");
     d->cat_count = 0; d->cat_names = NULL; d->item_ids = NULL; d->item_values = NULL; d->item_counts = NULL;
     d->cat_idx = 0; d->item_idx = 0; d->keys = NULL; d->vals = NULL; d->val_count = 0;
     d->mode = 0; d->dirty = true;
@@ -177,7 +178,8 @@ Widget *poweruser_factory(const WidgetRequest *req) {
         int ci = 0;
         cJSON *cat;
         cJSON_ArrayForEach(cat, cats) {
-            d->cat_names[ci] = strdup(cJSON_GetObjectItem(cat, "label")->valuestring ?: "");
+            cJSON *cat_label = cJSON_GetObjectItem(cat, "label");
+            d->cat_names[ci] = strdup(cat_label && cat_label->valuestring ? cat_label->valuestring : "");
             cJSON *items = cJSON_GetObjectItem(cat, "items");
             int ic = items ? cJSON_GetArraySize(items) : 0;
             d->item_counts[ci] = ic;
@@ -186,8 +188,10 @@ Widget *poweruser_factory(const WidgetRequest *req) {
             int ii = 0;
             cJSON *item;
             cJSON_ArrayForEach(item, items) {
-                const char *id = cJSON_GetObjectItem(item, "id")->valuestring ?: "";
-                const char *val = cJSON_GetObjectItem(item, "value")->valuestring ?: "";
+                cJSON *id_j = cJSON_GetObjectItem(item, "id");
+                cJSON *val_j = cJSON_GetObjectItem(item, "value");
+                const char *id = id_j && id_j->valuestring ? id_j->valuestring : "";
+                const char *val = val_j && val_j->valuestring ? val_j->valuestring : "";
                 d->item_ids[ci][ii] = strdup(id);
                 d->item_values[ci][ii] = strdup(val);
                 pw_set(d, id, val);

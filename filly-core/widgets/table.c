@@ -61,6 +61,7 @@ static void table_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult table_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     TableData *d = (TableData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

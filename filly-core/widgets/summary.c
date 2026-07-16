@@ -47,6 +47,8 @@ static void summary_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult summary_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)self;
+    (void)backend;
     if (ev->type == EVENT_KEY) {
         if (ev->code == KEY_ESC)
             return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true, .error = NULL });

@@ -66,6 +66,7 @@ static void input_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult input_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     InputData *d = (InputData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

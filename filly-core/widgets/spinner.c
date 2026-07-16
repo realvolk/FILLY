@@ -39,6 +39,7 @@ static void spinner_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult spinner_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     SpinnerData *d = (SpinnerData *)(self + 1);
     d->frame = (d->frame + 1) % 10;
     d->dirty = true;

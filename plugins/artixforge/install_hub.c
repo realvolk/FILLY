@@ -201,6 +201,7 @@ static void hub_update_filter(HubData *d, char **choices, int count) {
 }
 
 static void hub_apply_profile(HubData *d, const char *key, const char *variant) {
+    /* Default baseline */
     hub_set(d, "FS_TYPE", "ext4");
     hub_set(d, "BOOTLOADER", "grub");
     hub_set(d, "KERNEL_CHOICE", "linux");
@@ -226,148 +227,175 @@ static void hub_apply_profile(HubData *d, const char *key, const char *variant) 
     hub_set(d, "DISPLAY_MANAGER", "none");
     hub_set(d, "X_STACK", "xorg");
 
-    if (strcmp(key, "QUICK_PROFILE_KDE") == 0) {
-        hub_set(d, "WM_DE", "kde");
-        hub_set(d, "DISPLAY_MANAGER", "sddm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git flatpak fastfetch firewalld bluez zram-tools firefox neovim alacritty fzf zoxide starship eza btop htop tmux mpv");
-        if (strcmp(variant, "Full") == 0) hub_set(d, "KDE_PROFILE", "full");
-        else if (strcmp(variant, "Desktop") == 0) hub_set(d, "KDE_PROFILE", "desktop");
-        else hub_set(d, "KDE_PROFILE", "minimal");
-        hub_set(d, "QUICK_PROFILE", "KDE");
-    } else if (strcmp(key, "QUICK_PROFILE_XFCE") == 0) {
-        hub_set(d, "WM_DE", "xfce4");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "EXTRAS", strcmp(variant, "Full") == 0 ? "git firefox neovim alacritty fzf zoxide starship eza btop tmux mpv" : "git neovim tmux");
-        hub_set(d, "QUICK_PROFILE", "XFCE");
-    } else if (strcmp(key, "QUICK_PROFILE_MANGO") == 0) {
-        hub_set(d, "WM_DE", "mango");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux");
-        hub_set(d, "QUICK_PROFILE", "MangoWM");
-    } else if (strcmp(key, "QUICK_PROFILE_HYPRLAND") == 0) {
-        hub_set(d, "WM_DE", "hyprland");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi hyprpaper hyprlock fzf zoxide starship eza btop tmux");
-        hub_set(d, "QUICK_PROFILE", "Hyprland");
-    } else if (strcmp(key, "QUICK_PROFILE_SWAY") == 0) {
-        hub_set(d, "WM_DE", "sway");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "EXTRAS", "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux");
-        hub_set(d, "QUICK_PROFILE", "Sway");
-    } else if (strcmp(key, "QUICK_PROFILE_NIRI") == 0) {
-        hub_set(d, "WM_DE", "niri");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "EXTRAS", "git firefox alacritty waybar fuzzel swaybg swaylock fzf zoxide starship eza btop tmux");
-        hub_set(d, "QUICK_PROFILE", "Niri");
-    } else if (strcmp(key, "QUICK_PROFILE_I3") == 0) {
-        hub_set(d, "WM_DE", "i3wm");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git firefox alacritty fzf zoxide starship eza btop tmux");
-        hub_set(d, "QUICK_PROFILE", "i3wm");
-    } else if (strcmp(key, "QUICK_PROFILE_DWM") == 0) {
-        hub_set(d, "WM_DE", "dwm");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git firefox st fzf zoxide starship eza tmux");
-        hub_set(d, "QUICK_PROFILE", "dwm");
-    } else if (strcmp(key, "QUICK_PROFILE_LXQT") == 0) {
-        hub_set(d, "WM_DE", "lxqt");
-        hub_set(d, "DISPLAY_MANAGER", "sddm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "QUICK_PROFILE", "LXQt");
-    } else if (strcmp(key, "QUICK_PROFILE_LXDE") == 0) {
-        hub_set(d, "WM_DE", "lxde");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "QUICK_PROFILE", "LXDE");
-    } else if (strcmp(key, "QUICK_PROFILE_CINNAMON") == 0) {
-        hub_set(d, "WM_DE", "cinnamon");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "QUICK_PROFILE", "Cinnamon");
-    } else if (strcmp(key, "QUICK_PROFILE_BUDGIE") == 0) {
-        hub_set(d, "WM_DE", "budgie");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "QUICK_PROFILE", "Budgie");
-    } else if (strcmp(key, "QUICK_PROFILE_MOKSHA") == 0) {
-        hub_set(d, "WM_DE", "moksha");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "EXTRAS", "git firefox terminology fzf zoxide starship eza tmux");
-        hub_set(d, "QUICK_PROFILE", "Moksha");
-    } else if (strcmp(key, "QUICK_PROFILE_COSMIC") == 0) {
-        hub_set(d, "WM_DE", "cosmic");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "QUICK_PROFILE", "COSMIC");
-    } else if (strcmp(key, "QUICK_PROFILE_SERVER") == 0) {
-        hub_set(d, "WM_DE", "none");
-        hub_set(d, "DISPLAY_MANAGER", "none");
-        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
-        hub_set(d, "AUDIO_STACK", "none");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "PRIV_ESCALATION", "doas");
-        hub_set(d, "EXTRAS", strcmp(variant, "Full") == 0 ? "git firewalld zram-tools tmux" : "git tmux");
-        hub_set(d, "QUICK_PROFILE", "Server");
-    } else if (strcmp(key, "QUICK_PROFILE_EMBEDDED") == 0) {
-        hub_set(d, "WM_DE", "none");
-        hub_set(d, "DISPLAY_MANAGER", "none");
-        hub_set(d, "NETWORK_STACK", "none");
-        hub_set(d, "AUDIO_STACK", "none");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "PRIV_ESCALATION", "none");
-        hub_set(d, "INIT", "busybox");
-        hub_set(d, "KERNEL_CHOICE", "linux-lts");
-        hub_set(d, "COREUTILS", "busybox");
-        hub_set(d, "POWER_USER", "yes");
-        hub_set(d, "KEEP_BINARY_KERNEL", "no");
-        hub_set(d, "EXTRAS", "");
-        hub_set(d, "QUICK_PROFILE", "Embedded");
-    } else if (strcmp(key, "QUICK_PROFILE_VOLK") == 0) {
-        hub_set(d, "WM_DE", "kde");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "X_STACK", "xlibre");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "EXTRAS", "git fastfetch tmux htop kitty firewalld flatpak");
-        hub_set(d, "KDE_PROFILE", "minimal");
-        hub_set(d, "INIT", "dinit");
-        hub_set(d, "PRIV_ESCALATION", "doas");
-        hub_set(d, "POWER_USER", "yes");
-        hub_set(d, "KEEP_BINARY_KERNEL", "no");
-        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
-        hub_set(d, "QUICK_PROFILE", "Volk");
-    } else if (strcmp(key, "QUICK_PROFILE_TESTING") == 0) {
-        hub_set(d, "FS_TYPE", "xfs");
-        hub_set(d, "BOOTLOADER", "limine");
-        hub_set(d, "KERNEL_CHOICE", "linux-cachyos-bore");
-        hub_set(d, "INIT", "s6");
-        hub_set(d, "PRIV_ESCALATION", "doas");
-        hub_set(d, "USE_LUKS", "yes");
-        hub_set(d, "USE_LVM", "yes");
-        hub_set(d, "GENERATE_UKI", "yes");
-        hub_set(d, "ENABLE_ARCH_REPOS", "yes");
-        hub_set(d, "MICROCODE_OVERRIDE", "none");
-        hub_set(d, "COREUTILS", "busybox");
-        hub_set(d, "WM_DE", "mango");
-        hub_set(d, "DISPLAY_MANAGER", "lightdm");
-        hub_set(d, "NETWORK_STACK", "dhcpcd+iwd");
-        hub_set(d, "AUDIO_STACK", "pipewire");
-        hub_set(d, "X_STACK", "none");
-        hub_set(d, "USER_SHELL", "fish");
-        hub_set(d, "EXTRAS", "git fastfetch tmux htop kitty firewalld flatpak");
-        hub_set(d, "QUICK_PROFILE", "TestingQP");
+    typedef struct {
+        const char *profile_key;
+        const char *wm_de;
+        const char *display_manager;
+        const char *x_stack;
+        const char *enable_arch_repos;
+        const char *extras;
+        const char *extras_full;
+        const char *quick_profile_name;
+        const char *init;
+        const char *priv;
+        const char *keep_binary;
+        const char *coreutils;
+        const char *fs_type;
+        const char *bootloader;
+        const char *kernel;
+        const char *net;
+        const char *audio;
+        const char *shell;
+        const char *use_luks;
+        const char *use_lvm;
+        const char *generate_uki;
+        const char *microcode;
+        const char *power_user;
+        const char *swap_enabled;
+        const char *kde_profile;
+    } ProfileDef;
+
+    ProfileDef profiles[] = {
+        { .profile_key = "QUICK_PROFILE_KDE",
+          .wm_de = "kde", .display_manager = "sddm", .x_stack = "xlibre",
+          .enable_arch_repos = "yes",
+          .extras = "git flatpak fastfetch firewalld bluez zram-tools firefox neovim alacritty fzf zoxide starship eza btop htop tmux mpv",
+          .quick_profile_name = "KDE" },
+        { .profile_key = "QUICK_PROFILE_XFCE",
+          .wm_de = "xfce4", .display_manager = "lightdm", .x_stack = "xlibre",
+          .extras = "git neovim tmux",
+          .extras_full = "git firefox neovim alacritty fzf zoxide starship eza btop tmux mpv",
+          .quick_profile_name = "XFCE" },
+        { .profile_key = "QUICK_PROFILE_MANGO",
+          .wm_de = "mango", .display_manager = "lightdm", .x_stack = "none",
+          .enable_arch_repos = "yes",
+          .extras = "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux",
+          .quick_profile_name = "MangoWM" },
+        { .profile_key = "QUICK_PROFILE_HYPRLAND",
+          .wm_de = "hyprland", .x_stack = "none", .enable_arch_repos = "yes",
+          .extras = "git firefox alacritty waybar wofi hyprpaper hyprlock fzf zoxide starship eza btop tmux",
+          .quick_profile_name = "Hyprland" },
+        { .profile_key = "QUICK_PROFILE_SWAY",
+          .wm_de = "sway", .x_stack = "none",
+          .extras = "git firefox alacritty waybar wofi swaybg swaylock fzf zoxide starship eza btop tmux",
+          .quick_profile_name = "Sway" },
+        { .profile_key = "QUICK_PROFILE_NIRI",
+          .wm_de = "niri", .x_stack = "none",
+          .extras = "git firefox alacritty waybar fuzzel swaybg swaylock fzf zoxide starship eza btop tmux",
+          .quick_profile_name = "Niri" },
+        { .profile_key = "QUICK_PROFILE_I3",
+          .wm_de = "i3wm", .display_manager = "lightdm", .x_stack = "xlibre",
+          .enable_arch_repos = "yes",
+          .extras = "git firefox alacritty fzf zoxide starship eza btop tmux",
+          .quick_profile_name = "i3wm" },
+        { .profile_key = "QUICK_PROFILE_DWM",
+          .wm_de = "dwm", .display_manager = "lightdm", .x_stack = "xlibre",
+          .enable_arch_repos = "yes",
+          .extras = "git firefox st fzf zoxide starship eza tmux",
+          .quick_profile_name = "dwm" },
+        { .profile_key = "QUICK_PROFILE_LXQT",
+          .wm_de = "lxqt", .display_manager = "sddm", .x_stack = "xlibre",
+          .quick_profile_name = "LXQt" },
+        { .profile_key = "QUICK_PROFILE_LXDE",
+          .wm_de = "lxde", .display_manager = "lightdm", .x_stack = "xlibre",
+          .quick_profile_name = "LXDE" },
+        { .profile_key = "QUICK_PROFILE_CINNAMON",
+          .wm_de = "cinnamon", .display_manager = "lightdm", .x_stack = "xlibre",
+          .quick_profile_name = "Cinnamon" },
+        { .profile_key = "QUICK_PROFILE_BUDGIE",
+          .wm_de = "budgie", .display_manager = "lightdm", .x_stack = "xlibre",
+          .quick_profile_name = "Budgie" },
+        { .profile_key = "QUICK_PROFILE_MOKSHA",
+          .wm_de = "moksha", .display_manager = "lightdm", .x_stack = "xlibre",
+          .extras = "git firefox terminology fzf zoxide starship eza tmux",
+          .quick_profile_name = "Moksha" },
+        { .profile_key = "QUICK_PROFILE_COSMIC",
+          .wm_de = "cosmic", .display_manager = "lightdm", .x_stack = "none",
+          .quick_profile_name = "COSMIC" },
+        { .profile_key = "QUICK_PROFILE_SERVER",
+          .wm_de = "none", .display_manager = "none", .x_stack = "none",
+          .priv = "doas", .net = "dhcpcd+iwd", .audio = "none",
+          .extras = "git tmux",
+          .extras_full = "git firewalld zram-tools tmux",
+          .quick_profile_name = "Server" },
+        { .profile_key = "QUICK_PROFILE_EMBEDDED",
+          .wm_de = "none", .display_manager = "none", .x_stack = "none",
+          .init = "busybox", .priv = "none", .keep_binary = "no",
+          .coreutils = "busybox", .kernel = "linux-lts",
+          .net = "none", .audio = "none",
+          .power_user = "yes", .swap_enabled = "none",
+          .extras = "",
+          .quick_profile_name = "Embedded" },
+        { .profile_key = "QUICK_PROFILE_VOLK",
+          .wm_de = "kde", .display_manager = "lightdm", .x_stack = "xlibre",
+          .enable_arch_repos = "yes",
+          .init = "dinit", .priv = "doas", .keep_binary = "no",
+          .net = "dhcpcd+iwd", .power_user = "yes",
+          .extras = "git fastfetch tmux htop kitty firewalld flatpak",
+          .quick_profile_name = "Volk",
+          .kde_profile = "minimal" },
+        { .profile_key = "QUICK_PROFILE_TESTING",
+          .wm_de = "mango", .display_manager = "lightdm", .x_stack = "none",
+          .enable_arch_repos = "yes",
+          .init = "s6", .priv = "doas",
+          .coreutils = "busybox", .fs_type = "xfs", .bootloader = "limine",
+          .kernel = "linux-cachyos-bore", .net = "dhcpcd+iwd", .audio = "pipewire",
+          .shell = "fish", .use_luks = "yes", .use_lvm = "yes",
+          .generate_uki = "yes", .microcode = "none",
+          .extras = "git fastfetch tmux htop kitty firewalld flatpak",
+          .quick_profile_name = "TestingQP" },
+    };
+
+    int n_profiles = (int)(sizeof(profiles) / sizeof(profiles[0]));
+    ProfileDef *pf = NULL;
+    for (int i = 0; i < n_profiles; i++) {
+        if (strcmp(profiles[i].profile_key, key) == 0) {
+            pf = &profiles[i];
+            break;
+        }
     }
-    d->dirty = true;
+    if (!pf) return;
+
+    if (pf->wm_de)               hub_set(d, "WM_DE", pf->wm_de);
+    if (pf->display_manager)     hub_set(d, "DISPLAY_MANAGER", pf->display_manager);
+    if (pf->x_stack)             hub_set(d, "X_STACK", pf->x_stack);
+    if (pf->enable_arch_repos)   hub_set(d, "ENABLE_ARCH_REPOS", pf->enable_arch_repos);
+    if (pf->quick_profile_name)  hub_set(d, "QUICK_PROFILE", pf->quick_profile_name);
+    if (pf->init)                hub_set(d, "INIT", pf->init);
+    if (pf->priv)                hub_set(d, "PRIV_ESCALATION", pf->priv);
+    if (pf->keep_binary)         hub_set(d, "KEEP_BINARY_KERNEL", pf->keep_binary);
+    if (pf->coreutils)           hub_set(d, "COREUTILS", pf->coreutils);
+    if (pf->fs_type)             hub_set(d, "FS_TYPE", pf->fs_type);
+    if (pf->bootloader)          hub_set(d, "BOOTLOADER", pf->bootloader);
+    if (pf->kernel)              hub_set(d, "KERNEL_CHOICE", pf->kernel);
+    if (pf->net)                 hub_set(d, "NETWORK_STACK", pf->net);
+    if (pf->audio)               hub_set(d, "AUDIO_STACK", pf->audio);
+    if (pf->shell)               hub_set(d, "USER_SHELL", pf->shell);
+    if (pf->use_luks)            hub_set(d, "USE_LUKS", pf->use_luks);
+    if (pf->use_lvm)             hub_set(d, "USE_LVM", pf->use_lvm);
+    if (pf->generate_uki)        hub_set(d, "GENERATE_UKI", pf->generate_uki);
+    if (pf->microcode)           hub_set(d, "MICROCODE_OVERRIDE", pf->microcode);
+    if (pf->power_user)          hub_set(d, "POWER_USER", pf->power_user);
+    if (pf->swap_enabled)        hub_set(d, "SWAP_ENABLED", pf->swap_enabled);
+
+    /* Extras with Full variant support */
+    bool is_full = (variant && strcmp(variant, "Full") == 0);
+    if (is_full && pf->extras_full) {
+        hub_set(d, "EXTRAS", pf->extras_full);
+    } else if (pf->extras) {
+        hub_set(d, "EXTRAS", pf->extras);
+    }
+
+    if (pf->kde_profile) hub_set(d, "KDE_PROFILE", pf->kde_profile);
+    else if (strcmp(key, "QUICK_PROFILE_KDE") == 0) {
+        if (variant) {
+            if (strcmp(variant, "Full") == 0)      hub_set(d, "KDE_PROFILE", "full");
+            else if (strcmp(variant, "Desktop") == 0) hub_set(d, "KDE_PROFILE", "desktop");
+            else                                    hub_set(d, "KDE_PROFILE", "minimal");
+        } else {
+            hub_set(d, "KDE_PROFILE", "minimal");
+        }
+    }
 }
 
 static void hub_enter_edit(HubData *d, HubItem *item) {
@@ -1023,6 +1051,7 @@ static EventResult hub_handle_edit_event(HubData *d, Event *ev) {
 }
 
 static EventResult hub_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     HubData *d = (HubData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 

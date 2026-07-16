@@ -101,6 +101,7 @@ static void cp_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult cp_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     ColorPickerData *d = (ColorPickerData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -132,6 +133,8 @@ static void cp_clear_dirty(Widget *self) { ((ColorPickerData *)(self + 1))->dirt
 static void cp_destroy(Widget *self) { free(((ColorPickerData *)(self + 1))->title); }
 
 Widget *color_picker_widget_new(const char *title, char **colors, int color_count) {
+    (void)colors;
+    (void)color_count;
     Widget *w = calloc(1, sizeof(Widget) + sizeof(ColorPickerData));
     w->vtable.render = cp_render;
     w->vtable.handle_event = cp_handle_event;

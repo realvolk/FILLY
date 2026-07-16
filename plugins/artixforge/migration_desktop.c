@@ -60,6 +60,7 @@ static void md_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult md_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     MigDEData *d = (MigDEData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -116,8 +117,10 @@ Widget *migration_desktop_factory(const WidgetRequest *req) {
     w->vtable.render = md_render; w->vtable.handle_event = md_handle;
     w->vtable.is_dirty = md_is_dirty; w->vtable.clear_dirty = md_clear_dirty; w->vtable.destroy = md_destroy;
     MigDEData *d = (MigDEData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Desktop Migration");
-    d->current_de = strdup(cJSON_GetObjectItem(req->params, "current_de")->valuestring ?: "none");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    cJSON *de_j = cJSON_GetObjectItem(req->params, "current_de");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Desktop Migration");
+    d->current_de = strdup(de_j && de_j->valuestring ? de_j->valuestring : "none");
     const char *de_list[] = {"kde","sonicde","xfce","lxqt","lxde","hyprland","sway","niri","i3wm","dwm","vxwm","icewm","mango","cinnamon","budgie","moksha","cosmic","none"};
     d->de_count = 18; d->des = malloc(18 * sizeof(char *));
     for (int i = 0; i < 18; i++) d->des[i] = strdup(de_list[i]);

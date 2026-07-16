@@ -16,14 +16,6 @@ typedef struct {
     bool dirty;
 } FilePickerData;
 
-static int cmp_entries(const void *a, const void *b, void *ctx) {
-    bool *is_dir = (bool *)ctx;
-    int ia = *(int *)a, ib = *(int *)b;
-    if (is_dir[ia] && !is_dir[ib]) return -1;
-    if (!is_dir[ia] && is_dir[ib]) return 1;
-    return 0;
-}
-
 static void fp_populate(FilePickerData *d) {
     for (int i = 0; i < d->entry_count; i++) free(d->entries[i]);
     free(d->entries); free(d->is_dir);
@@ -100,6 +92,7 @@ static void file_picker_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult file_picker_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     FilePickerData *d = (FilePickerData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

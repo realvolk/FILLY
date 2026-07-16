@@ -28,6 +28,7 @@ static void prof_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult prof_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     ProfData *d = (ProfData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -48,7 +49,8 @@ Widget *profile_factory(const WidgetRequest *req) {
     w->vtable.render = prof_render; w->vtable.handle_event = prof_handle;
     w->vtable.is_dirty = prof_dirty; w->vtable.clear_dirty = prof_clear; w->vtable.destroy = prof_destroy;
     ProfData *d = (ProfData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Profile");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Profile");
     cJSON *ch = cJSON_GetObjectItem(req->params, "choices");
     d->count = ch ? cJSON_GetArraySize(ch) : 0;
     d->choices = malloc(d->count * sizeof(char *));

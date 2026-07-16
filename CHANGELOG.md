@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.2.2 (2026-07-16) — FILLY
+
+### Changed
+- **Relay key protocol rewritten** — `relay.c` now implements the same CSI/SS3 escape sequence parser as `terminal.c`, sending `KeyCode` enum values instead of raw bytes. This fixes the daemon-relay path for all interactive widgets (menus, inputs, hub, etc.) that previously received unmapped key codes
+- **Install hub profile system refactored** — `hub_apply_profile` replaced 200+ lines of repetitive if-else chains with a data-driven `ProfileDef` table using designated initializers. Each profile is a single row specifying only the fields it overrides
+- **POSIX compliance pass** — build now uses `-std=c99 -D_POSIX_C_SOURCE=200809L`; all GCC `?:` extensions replaced with explicit ternary expressions; `strcasecmp` replaced with standard C `str_case_eq` helper
+
+### Fixed
+- **Daemon-relay interactive path** — relay now parses escape sequences from `/dev/tty` and sends `KeyCode` enum integers to the daemon, matching the socket backend's `KEY %d %c` protocol. Previously raw bytes were sent, producing codes that fell through all widget switch cases
+- **Session NULL guard** — `session_run` validates widget, backend, and vtable function pointers before calling, preventing segfaults from incomplete plugin widgets
+- **Widget registry NULL guard** — `widget_registry_create` checks factory pointer before calling
+- **Install hub struct initializer warnings** — `ProfileDef` table uses designated initializers, eliminating excess element and missing initializer warnings across all 18 profiles
+- **yesno widget fallthrough** — fixed implicit fallthrough warning in `KEY_CHAR` handler for `'n'`/`'N'` quick-select
+
+### Removed
+- **Dead socket backend** — `filly-daemon/socket_backend.c` and `socket_backend.h` removed; the socket vtable is defined directly in `daemon.c` and the separate file was never compiled or linked
+
+### Housekeeping
+- All widget and plugin `handle_event` functions now explicitly cast unused `backend` parameter to `(void)`, yielding a clean `-Wall -Wextra` build with zero warnings
+- Removed unused functions: `cmp_entries` (file_picker.c), `first_weekday` (calendar.c), `flatten` (tree.c)
+- Retained but silenced with `(void)` casts: partition type/flag arrays in `disk.c` (reserved for TYPE_PICKER/FLAG_PICKER modes), group lists in `user_manager.c` (reserved for group selection UI)
+
 ## v0.2.1 (2026-07-15) — FILLY
 
 ### Changed

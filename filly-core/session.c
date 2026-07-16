@@ -5,6 +5,16 @@
 #include <stdlib.h>
 
 WidgetResponse session_run(Widget *w, Backend *backend) {
+    if (!w || !backend || !backend->vtable) {
+        WidgetResponse err = { .result = NULL, .cancelled = true, .error = (char *)"Invalid widget or backend" };
+        return err;
+    }
+    if (!w->vtable.render || !w->vtable.handle_event ||
+        !w->vtable.is_dirty || !w->vtable.clear_dirty) {
+        WidgetResponse err = { .result = NULL, .cancelled = true, .error = (char *)"Incomplete widget vtable" };
+        return err;
+    }
+
     backend->vtable->setup(backend->data);
     int term_w, term_h;
     backend->vtable->get_size(backend->data, &term_w, &term_h);

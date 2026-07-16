@@ -71,6 +71,7 @@ static void rec_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult rec_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     RecoveryData *d = (RecoveryData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 
@@ -114,7 +115,8 @@ Widget *recovery_factory(const WidgetRequest *req) {
     w->vtable.render = rec_render; w->vtable.handle_event = rec_handle;
     w->vtable.is_dirty = rec_is_dirty; w->vtable.clear_dirty = rec_clear_dirty; w->vtable.destroy = rec_destroy;
     RecoveryData *d = (RecoveryData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Recovery");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Recovery");
     d->status_count = 0; d->status_keys = NULL; d->status_labels = NULL; d->status_values = NULL;
     d->repair_count = 0; d->repair_keys = NULL; d->repair_labels = NULL;
     d->selected = 0; d->mode = 0; d->confirm_key = NULL; d->dirty = true;
@@ -127,9 +129,12 @@ Widget *recovery_factory(const WidgetRequest *req) {
         d->status_values = malloc(d->status_count * sizeof(char *));
         int i = 0; cJSON *s;
         cJSON_ArrayForEach(s, status) {
-            d->status_keys[i] = strdup(cJSON_GetObjectItem(s, "key")->valuestring ?: "");
-            d->status_labels[i] = strdup(cJSON_GetObjectItem(s, "label")->valuestring ?: "");
-            d->status_values[i] = strdup(cJSON_GetObjectItem(s, "status")->valuestring ?: "ok");
+            cJSON *key_j = cJSON_GetObjectItem(s, "key");
+            cJSON *label_j = cJSON_GetObjectItem(s, "label");
+            cJSON *stat_j = cJSON_GetObjectItem(s, "status");
+            d->status_keys[i] = strdup(key_j && key_j->valuestring ? key_j->valuestring : "");
+            d->status_labels[i] = strdup(label_j && label_j->valuestring ? label_j->valuestring : "");
+            d->status_values[i] = strdup(stat_j && stat_j->valuestring ? stat_j->valuestring : "ok");
             i++;
         }
     }
@@ -140,8 +145,10 @@ Widget *recovery_factory(const WidgetRequest *req) {
         d->repair_labels = malloc(d->repair_count * sizeof(char *));
         int i = 0; cJSON *r;
         cJSON_ArrayForEach(r, repairs) {
-            d->repair_keys[i] = strdup(cJSON_GetObjectItem(r, "key")->valuestring ?: "");
-            d->repair_labels[i] = strdup(cJSON_GetObjectItem(r, "label")->valuestring ?: "");
+            cJSON *key_j = cJSON_GetObjectItem(r, "key");
+            cJSON *label_j = cJSON_GetObjectItem(r, "label");
+            d->repair_keys[i] = strdup(key_j && key_j->valuestring ? key_j->valuestring : "");
+            d->repair_labels[i] = strdup(label_j && label_j->valuestring ? label_j->valuestring : "");
             i++;
         }
     }

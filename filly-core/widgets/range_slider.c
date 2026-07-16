@@ -65,6 +65,7 @@ static void rs_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult rs_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     RangeSliderData *d = (RangeSliderData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

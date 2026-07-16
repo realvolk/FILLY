@@ -66,6 +66,7 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult yesno_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     YesNoData *d = (YesNoData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -84,7 +85,9 @@ static EventResult yesno_handle_event(Widget *self, Event *ev, Backend *backend)
                 return event_result_response((WidgetResponse){ .result = cJSON_CreateBool(1), .cancelled = false, .error = NULL });
             if (ev->ch == 'n' || ev->ch == 'N')
                 return event_result_response((WidgetResponse){ .result = cJSON_CreateBool(0), .cancelled = false, .error = NULL });
-        default: return event_result_unhandled();
+            return event_result_unhandled();
+        default:
+            return event_result_unhandled();
     }
 }
 

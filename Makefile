@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -fPIC -I.
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O2 -fPIC -I.
 LDFLAGS = -ldl -lpthread -lm -rdynamic
 PREFIX = /usr/local
 

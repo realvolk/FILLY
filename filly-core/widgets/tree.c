@@ -15,22 +15,12 @@ typedef struct {
     bool dirty;
 } TreeData;
 
-static void flatten(TreeNode **nodes, int count, int *path, int *out_indices, int *out_count, int *cursor_ptr) {
-    for (int i = 0; i < count; i++) {
-        out_indices[(*out_count)++] = *cursor_ptr;
-        (*cursor_ptr)++;
-        if (nodes[i]->expanded && nodes[i]->child_count > 0)
-            flatten(nodes[i]->children, nodes[i]->child_count, path, out_indices, out_count, cursor_ptr);
-    }
-}
-
 static void tree_render(Widget *self, Rect area, RenderTree *out) {
     TreeData *d = (TreeData *)(self + 1);
     int total_nodes = 0;
     for (int i = 0; i < d->node_count; i++) total_nodes += d->nodes[i].child_count + 1;
     d->flat_indices = realloc(d->flat_indices, total_nodes * sizeof(int));
     d->flat_count = 0;
-    int cursor = 0;
     for (int i = 0; i < d->node_count; i++) {
         d->flat_indices[d->flat_count++] = i;
         if (d->nodes[i].expanded && d->nodes[i].child_count > 0) {
@@ -81,6 +71,7 @@ static void tree_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult tree_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     TreeData *d = (TreeData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

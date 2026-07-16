@@ -63,6 +63,7 @@ static void password_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult password_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     PasswordData *d = (PasswordData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {

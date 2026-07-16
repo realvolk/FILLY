@@ -35,8 +35,10 @@ void widget_registry_register(const char *name, WidgetFactory factory) {
 
 Widget *widget_registry_create(const WidgetRequest *req) {
     for (RegistryEntry *e = registry; e; e = e->next) {
-        if (strcmp(e->name, req->widget) == 0)
+        if (strcmp(e->name, req->widget) == 0) {
+            if (!e->factory) return NULL;
             return e->factory(req);
+        }
     }
     return NULL;
 }

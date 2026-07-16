@@ -87,6 +87,7 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult pw_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     PWConfirmData *d = (PWConfirmData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -129,8 +130,8 @@ Widget *password_confirm_factory(const WidgetRequest *req) {
     PWConfirmData *d = (PWConfirmData *)(w + 1);
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *m = cJSON_GetObjectItem(req->params, "message");
-    d->title = t ? strdup(t->valuestring) : strdup("Password");
-    d->message = m ? strdup(m->valuestring) : strdup("");
+    d->title = strdup(t && t->valuestring ? t->valuestring : "Password");
+    d->message = m && m->valuestring ? strdup(m->valuestring) : strdup("");
     d->pass1 = strdup(""); d->pass2 = strdup("");
     d->field = 0; d->dirty = true;
     return w;

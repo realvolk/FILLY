@@ -107,6 +107,7 @@ static void pane_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult pane_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)self; (void)ev; (void)backend;
     return event_result_unhandled();
 }
 
@@ -165,8 +166,6 @@ static void register_builtin_widgets(void) {
     widget_registry_register("tooltip", tooltip_widget_factory);
     widget_registry_register("hub", hub_widget_factory);
 }
-
-static Widget *factory_from_params(const WidgetRequest *req, const char *type, ...) { return NULL; }
 
 Widget *menu_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
@@ -357,10 +356,12 @@ Widget *gauge_widget_factory(const WidgetRequest *req) {
     cJSON *l = cJSON_GetObjectItem(req->params, "label");
     return gauge_widget_new(t ? t->valuestring : "", p ? p->valueint : 0, l ? l->valuestring : "");
 }
+
 Widget *calendar_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     return calendar_widget_new(t ? t->valuestring : "");
 }
+
 Widget *context_menu_widget_factory(const WidgetRequest *req) {
     cJSON *items = cJSON_GetObjectItem(req->params, "items");
     int count = items ? cJSON_GetArraySize(items) : 0;
@@ -371,11 +372,13 @@ Widget *context_menu_widget_factory(const WidgetRequest *req) {
     free(arr);
     return w;
 }
+
 Widget *notification_widget_factory(const WidgetRequest *req) {
     cJSON *m = cJSON_GetObjectItem(req->params, "message");
     cJSON *d = cJSON_GetObjectItem(req->params, "duration");
     return notification_widget_new(m ? m->valuestring : "", d ? d->valueint : 3);
 }
+
 Widget *radio_group_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *m = cJSON_GetObjectItem(req->params, "message");
@@ -389,6 +392,7 @@ Widget *radio_group_widget_factory(const WidgetRequest *req) {
     free(choices);
     return w;
 }
+
 Widget *range_slider_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *min = cJSON_GetObjectItem(req->params, "min");
@@ -397,6 +401,7 @@ Widget *range_slider_widget_factory(const WidgetRequest *req) {
     cJSON *l = cJSON_GetObjectItem(req->params, "label");
     return range_slider_widget_new(t ? t->valuestring : "", min ? min->valueint : 0, max ? max->valueint : 100, val ? val->valueint : 50, l ? l->valuestring : "");
 }
+
 Widget *color_picker_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *c = cJSON_GetObjectItem(req->params, "colors");
@@ -408,24 +413,29 @@ Widget *color_picker_widget_factory(const WidgetRequest *req) {
     free(colors);
     return w;
 }
+
 Widget *badge_widget_factory(const WidgetRequest *req) {
     cJSON *text = cJSON_GetObjectItem(req->params, "text");
     return badge_widget_new(text ? text->valuestring : "");
 }
+
 Widget *rich_text_widget_factory(const WidgetRequest *req) {
     cJSON *c = cJSON_GetObjectItem(req->params, "content");
     return rich_text_widget_new(c ? c->valuestring : "");
 }
+
 Widget *tooltip_widget_factory(const WidgetRequest *req) {
     cJSON *text = cJSON_GetObjectItem(req->params, "text");
     return tooltip_widget_new(text ? text->valuestring : "");
 }
+
 Widget *hub_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *cat = cJSON_GetObjectItem(req->params, "categories");
     cJSON *act = cJSON_GetObjectItem(req->params, "actions");
     return hub_widget_new(t ? t->valuestring : "", cat, act);
 }
+
 Widget *form_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *fields_json = cJSON_GetObjectItem(req->params, "fields");
@@ -434,10 +444,14 @@ Widget *form_widget_factory(const WidgetRequest *req) {
     FormField *fields = calloc(count, sizeof(FormField));
     for (int i = 0; i < count; i++) {
         cJSON *f = cJSON_GetArrayItem(fields_json, i);
-        fields[i].label = strdup(cJSON_GetObjectItem(f, "label")->valuestring ?: "");
-        fields[i].widget_type = strdup(cJSON_GetObjectItem(f, "widget_type")->valuestring ?: "input");
-        fields[i].value = strdup(cJSON_GetObjectItem(f, "value")->valuestring ?: "");
-        fields[i].placeholder = strdup(cJSON_GetObjectItem(f, "placeholder")->valuestring ?: "");
+        cJSON *label_j = cJSON_GetObjectItem(f, "label");
+        cJSON *wtype_j = cJSON_GetObjectItem(f, "widget_type");
+        cJSON *value_j = cJSON_GetObjectItem(f, "value");
+        cJSON *ph_j = cJSON_GetObjectItem(f, "placeholder");
+        fields[i].label = strdup(label_j && label_j->valuestring ? label_j->valuestring : "");
+        fields[i].widget_type = strdup(wtype_j && wtype_j->valuestring ? wtype_j->valuestring : "input");
+        fields[i].value = strdup(value_j && value_j->valuestring ? value_j->valuestring : "");
+        fields[i].placeholder = strdup(ph_j && ph_j->valuestring ? ph_j->valuestring : "");
         cJSON *ch = cJSON_GetObjectItem(f, "choices");
         fields[i].choice_count = ch ? cJSON_GetArraySize(ch) : 0;
         fields[i].choices = fields[i].choice_count > 0 ? malloc(fields[i].choice_count * sizeof(char *)) : NULL;
@@ -453,6 +467,7 @@ Widget *form_widget_factory(const WidgetRequest *req) {
     free(fields);
     return w;
 }
+
 Widget *tabs_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     cJSON *tabs_json = cJSON_GetObjectItem(req->params, "tabs");
@@ -461,7 +476,8 @@ Widget *tabs_widget_factory(const WidgetRequest *req) {
     Widget **children = malloc(count * sizeof(Widget *));
     for (int i = 0; i < count; i++) {
         cJSON *tab = cJSON_GetArrayItem(tabs_json, i);
-        labels[i] = strdup(cJSON_GetObjectItem(tab, "label")->valuestring ?: "");
+        cJSON *label_j = cJSON_GetObjectItem(tab, "label");
+        labels[i] = strdup(label_j && label_j->valuestring ? label_j->valuestring : "");
         children[i] = msg_widget_new(labels[i], "");
     }
     Widget *w = tabs_widget_new(t ? t->valuestring : "", labels, count, children, count);
@@ -469,6 +485,7 @@ Widget *tabs_widget_factory(const WidgetRequest *req) {
     free(labels); free(children);
     return w;
 }
+
 Widget *split_panes_widget_factory(const WidgetRequest *req) {
     cJSON *o = cJSON_GetObjectItem(req->params, "orientation");
     Orientation orient = (o && strcmp(o->valuestring, "vertical") == 0) ? ORIENT_VERTICAL : ORIENT_HORIZONTAL;
@@ -476,6 +493,7 @@ Widget *split_panes_widget_factory(const WidgetRequest *req) {
     Widget *second = pane_widget_new("Pane 2", "Right / Bottom content");
     return split_panes_widget_new(orient, first, second);
 }
+
 Widget *tree_widget_factory(const WidgetRequest *req) {
     cJSON *t = cJSON_GetObjectItem(req->params, "title");
     TreeNode nodes[3] = {

@@ -42,7 +42,7 @@ typedef struct {
 typedef struct {
     UserEntry *users;
     int user_count;
-    int mode; // 0=browse, 1=add, 2=confirm_delete
+    int mode;
     int selected;
     int del_idx;
     AddUserState add_state;
@@ -177,6 +177,7 @@ static void um_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult um_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     UMData *d = (UMData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 
@@ -314,6 +315,9 @@ static void um_destroy(Widget *self) {
 }
 
 Widget *user_manager_factory(const WidgetRequest *req) {
+    (void)req;
+    (void)all_groups;
+    (void)all_group_count;
     Widget *w = calloc(1, sizeof(Widget) + sizeof(UMData));
     w->vtable.render = um_render;
     w->vtable.handle_event = um_handle;

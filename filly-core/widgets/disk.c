@@ -50,20 +50,34 @@ typedef struct {
     bool dirty;
 } DiskData;
 
+static int str_case_eq(const char *a, const char *b) {
+    while (*a && *b) {
+        char ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+        char cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+        if (ca != cb) return 0;
+        a++; b++;
+    }
+    return *a == *b;
+}
+
 static long long human_to_bytes(const char *s) {
     char buf[64];
     strncpy(buf, s, sizeof(buf) - 1);
-    int len = strlen(buf);
+    buf[sizeof(buf) - 1] = '\0';
     char *num_end = buf;
     while (*num_end && (isdigit(*num_end) || *num_end == '.' || *num_end == '-')) num_end++;
     double num = atof(buf);
     char *suffix = num_end;
     while (*suffix == ' ') suffix++;
-    if (strcasecmp(suffix, "B") == 0) return (long long)num;
-    if (strcasecmp(suffix, "K") == 0 || strcasecmp(suffix, "KB") == 0 || strcasecmp(suffix, "KIB") == 0) return (long long)(num * 1024);
-    if (strcasecmp(suffix, "M") == 0 || strcasecmp(suffix, "MB") == 0 || strcasecmp(suffix, "MIB") == 0) return (long long)(num * 1024 * 1024);
-    if (strcasecmp(suffix, "G") == 0 || strcasecmp(suffix, "GB") == 0 || strcasecmp(suffix, "GIB") == 0) return (long long)(num * 1024 * 1024 * 1024);
-    if (strcasecmp(suffix, "T") == 0 || strcasecmp(suffix, "TB") == 0 || strcasecmp(suffix, "TIB") == 0) return (long long)(num * 1024 * 1024 * 1024 * 1024);
+    if (str_case_eq(suffix, "B")) return (long long)num;
+    if (str_case_eq(suffix, "K") || str_case_eq(suffix, "KB") || str_case_eq(suffix, "KIB"))
+        return (long long)(num * 1024);
+    if (str_case_eq(suffix, "M") || str_case_eq(suffix, "MB") || str_case_eq(suffix, "MIB"))
+        return (long long)(num * 1024 * 1024);
+    if (str_case_eq(suffix, "G") || str_case_eq(suffix, "GB") || str_case_eq(suffix, "GIB"))
+        return (long long)(num * 1024 * 1024 * 1024);
+    if (str_case_eq(suffix, "T") || str_case_eq(suffix, "TB") || str_case_eq(suffix, "TIB"))
+        return (long long)(num * 1024 * 1024 * 1024 * 1024);
     return (long long)num;
 }
 
@@ -177,6 +191,7 @@ static void disk_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     DiskData *d = (DiskData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     int total = d->part_count + d->free_count;
@@ -212,6 +227,7 @@ static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) 
                     cJSON_AddItemToObject(result, "free_space", free);
                     return event_result_response((WidgetResponse){ .result = result, .cancelled = false, .error = NULL });
                 }
+                /* fall through */
             default: d->mode = DMODE_MAIN; d->dirty = true; return event_result_handled();
         }
     }
@@ -300,9 +316,6 @@ static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) 
 
     switch (ev->code) {
         case KEY_ESC:
-        case KEY_CHAR:
-            if (ev->code == KEY_CHAR && ev->ch == 'q') {}
-            else if (ev->code == KEY_CHAR) break;
             return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true, .error = NULL });
         case KEY_UP: if (d->selected > 0) d->selected--; d->dirty = true; return event_result_handled();
         case KEY_DOWN: if (d->selected + 1 < total) d->selected++; d->dirty = true; return event_result_handled();
@@ -311,6 +324,8 @@ static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) 
 
     if (ev->code == KEY_CHAR && !d->readonly) {
         switch (ev->ch) {
+            case 'q':
+                return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true, .error = NULL });
             case 'n':
                 if (d->selected >= d->part_count && d->selected - d->part_count < d->free_count) {
                     d->editing_idx = d->selected - d->part_count;
@@ -363,9 +378,6 @@ static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) 
             case 'w':
                 d->mode = DMODE_CONFIRM;
                 d->confirm_title = "Write Changes";
-                char buf[512];
-                snprintf(buf, sizeof(buf), "Apply to %s?", d->disk);
-                d->confirm_msg = strdup(buf);
                 d->dirty = true;
                 return event_result_handled();
         }
@@ -441,5 +453,11 @@ Widget *disk_widget_new(const char *title, const char *disk, cJSON *partitions_j
             i++;
         }
     }
+
+    (void)partition_type_choices;
+    (void)pt_count;
+    (void)flag_choices;
+    (void)flag_count;
+
     return w;
 }

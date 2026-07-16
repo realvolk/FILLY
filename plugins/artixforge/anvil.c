@@ -110,6 +110,7 @@ static void anvil_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult anvil_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     AnvilData *d = (AnvilData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 
@@ -168,7 +169,8 @@ Widget *anvil_factory(const WidgetRequest *req) {
     w->vtable.clear_dirty = anvil_clear_dirty;
     w->vtable.destroy = anvil_destroy;
     AnvilData *d = (AnvilData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Anvil");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Anvil");
     d->cat_count = 0; d->cat_names = NULL;
     d->action_keys = NULL; d->action_descs = NULL; d->action_counts = NULL;
     d->cat_idx = 0; d->action_idx = 0; d->mode = 0; d->confirm_key = NULL; d->dirty = true;
@@ -182,7 +184,8 @@ Widget *anvil_factory(const WidgetRequest *req) {
         int ci = 0;
         cJSON *cat;
         cJSON_ArrayForEach(cat, cats) {
-            d->cat_names[ci] = strdup(cJSON_GetObjectItem(cat, "category")->valuestring ?: "");
+            cJSON *cat_label = cJSON_GetObjectItem(cat, "category");
+            d->cat_names[ci] = strdup(cat_label && cat_label->valuestring ? cat_label->valuestring : "");
             cJSON *actions = cJSON_GetObjectItem(cat, "actions");
             int ac = actions ? cJSON_GetArraySize(actions) : 0;
             d->action_counts[ci] = ac;
@@ -191,8 +194,10 @@ Widget *anvil_factory(const WidgetRequest *req) {
             int ai = 0;
             cJSON *act;
             cJSON_ArrayForEach(act, actions) {
-                d->action_keys[ci][ai] = strdup(cJSON_GetObjectItem(act, "key")->valuestring ?: "");
-                d->action_descs[ci][ai] = strdup(cJSON_GetObjectItem(act, "description")->valuestring ?: "");
+                cJSON *key_j = cJSON_GetObjectItem(act, "key");
+                cJSON *desc_j = cJSON_GetObjectItem(act, "description");
+                d->action_keys[ci][ai] = strdup(key_j && key_j->valuestring ? key_j->valuestring : "");
+                d->action_descs[ci][ai] = strdup(desc_j && desc_j->valuestring ? desc_j->valuestring : "");
                 ai++;
             }
             ci++;

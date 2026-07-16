@@ -48,6 +48,8 @@ static void msg_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult msg_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)self;
+    (void)backend;
     if (ev->type == EVENT_KEY)
         return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
     return event_result_unhandled();

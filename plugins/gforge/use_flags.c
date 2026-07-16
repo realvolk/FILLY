@@ -33,6 +33,7 @@ static void uf_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult uf_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     UFData *d = (UFData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -74,15 +75,18 @@ Widget *use_flags_factory(const WidgetRequest *req) {
     w->vtable.render = uf_render; w->vtable.handle_event = uf_handle;
     w->vtable.is_dirty = uf_dirty; w->vtable.clear_dirty = uf_clear; w->vtable.destroy = uf_destroy;
     UFData *d = (UFData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "USE Flags");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "USE Flags");
     cJSON *ch = cJSON_GetObjectItem(req->params, "choices");
     d->count = ch ? cJSON_GetArraySize(ch) : 0;
     d->flags = malloc(d->count * sizeof(char *));
     for (int i = 0; i < d->count; i++) d->flags[i] = strdup(cJSON_GetArrayItem(ch, i)->valuestring);
     d->selected = calloc(d->count, sizeof(bool));
     d->cursor = 0;
-    d->min = cJSON_GetObjectItem(req->params, "min") ? cJSON_GetObjectItem(req->params, "min")->valueint : 0;
-    d->max = cJSON_GetObjectItem(req->params, "max") ? cJSON_GetObjectItem(req->params, "max")->valueint : d->count;
+    cJSON *min_j = cJSON_GetObjectItem(req->params, "min");
+    cJSON *max_j = cJSON_GetObjectItem(req->params, "max");
+    d->min = min_j ? min_j->valueint : 0;
+    d->max = max_j ? max_j->valueint : d->count;
     d->dirty = true;
     return w;
 }

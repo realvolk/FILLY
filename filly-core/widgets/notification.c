@@ -43,6 +43,8 @@ static void notification_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult notification_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)ev;
+    (void)backend;
     NotificationData *d = (NotificationData *)(self + 1);
     if (time(NULL) - d->start > d->duration)
         return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });

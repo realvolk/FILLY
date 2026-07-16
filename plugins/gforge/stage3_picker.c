@@ -28,6 +28,7 @@ static void s3_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult s3_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     S3Data *d = (S3Data *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -48,7 +49,8 @@ Widget *stage3_factory(const WidgetRequest *req) {
     w->vtable.render = s3_render; w->vtable.handle_event = s3_handle;
     w->vtable.is_dirty = s3_dirty; w->vtable.clear_dirty = s3_clear; w->vtable.destroy = s3_destroy;
     S3Data *d = (S3Data *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Stage3");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Stage3");
     cJSON *ch = cJSON_GetObjectItem(req->params, "choices");
     d->count = ch ? cJSON_GetArraySize(ch) : 0;
     d->choices = malloc(d->count * sizeof(char *));

@@ -16,10 +16,14 @@ static void separator_render(Widget *self, Rect area, RenderTree *out) {
     out->separator.orientation = d->orientation;
 }
 
-static EventResult separator_handle_event(Widget *self, Event *ev, Backend *backend) { return event_result_unhandled(); }
+static EventResult separator_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)self; (void)ev; (void)backend;
+    return event_result_unhandled();
+}
+
 static bool separator_is_dirty(Widget *self) { return ((SeparatorData *)(self + 1))->dirty; }
 static void separator_clear_dirty(Widget *self) { ((SeparatorData *)(self + 1))->dirty = false; }
-static void separator_destroy(Widget *self) { }
+static void separator_destroy(Widget *self) { (void)self; }
 
 Widget *separator_widget_new(Orientation orientation) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SeparatorData));

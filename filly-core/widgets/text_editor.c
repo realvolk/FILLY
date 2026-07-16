@@ -130,6 +130,7 @@ static void text_editor_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult text_editor_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     TextEditorData *d = (TextEditorData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 

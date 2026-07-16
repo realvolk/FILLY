@@ -19,7 +19,11 @@ static void tooltip_render(Widget *self, Rect area, RenderTree *out) {
     out->text.style = s;
 }
 
-static EventResult tooltip_handle_event(Widget *self, Event *ev, Backend *backend) { return event_result_unhandled(); }
+static EventResult tooltip_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)self; (void)ev; (void)backend;
+    return event_result_unhandled();
+}
+
 static bool tooltip_is_dirty(Widget *self) { return ((TooltipData *)(self + 1))->dirty; }
 static void tooltip_clear_dirty(Widget *self) { ((TooltipData *)(self + 1))->dirty = false; }
 static void tooltip_destroy(Widget *self) { free(((TooltipData *)(self + 1))->text); }

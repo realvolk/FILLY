@@ -55,6 +55,7 @@ static void mi_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult mi_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     MigInitData *d = (MigInitData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     switch (ev->code) {
@@ -91,8 +92,10 @@ Widget *migration_init_factory(const WidgetRequest *req) {
     w->vtable.render = mi_render; w->vtable.handle_event = mi_handle;
     w->vtable.is_dirty = mi_is_dirty; w->vtable.clear_dirty = mi_clear_dirty; w->vtable.destroy = mi_destroy;
     MigInitData *d = (MigInitData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "Init Migration");
-    d->current_init = strdup(cJSON_GetObjectItem(req->params, "current_init")->valuestring ?: "openrc");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    cJSON *init_j = cJSON_GetObjectItem(req->params, "current_init");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Init Migration");
+    d->current_init = strdup(init_j && init_j->valuestring ? init_j->valuestring : "openrc");
     d->targets = malloc(4 * sizeof(char *));
     d->targets[0] = strdup("openrc"); d->targets[1] = strdup("runit");
     d->targets[2] = strdup("dinit"); d->targets[3] = strdup("s6");

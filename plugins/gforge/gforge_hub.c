@@ -4,8 +4,9 @@
 #include "cJSON.h"
 
 Widget *gforge_hub_factory(const WidgetRequest *req) {
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
     return hub_widget_new(
-        cJSON_GetObjectItem(req->params, "title")->valuestring,
+        title_j && title_j->valuestring ? title_j->valuestring : "",
         cJSON_GetObjectItem(req->params, "categories"),
         cJSON_GetObjectItem(req->params, "actions")
     );

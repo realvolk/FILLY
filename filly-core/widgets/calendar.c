@@ -21,14 +21,6 @@ static int days_in_month(int year, int month) {
     }
 }
 
-static int first_weekday(int year, int month) {
-    int m = month < 3 ? month + 12 : month;
-    int y = month < 3 ? year - 1 : year;
-    int q = 1;
-    int h = (q + (13 * (m + 1)) / 5 + y + y / 4 - y / 100 + y / 400) % 7;
-    return (h + 6) % 7;
-}
-
 static void calendar_render(Widget *self, Rect area, RenderTree *out) {
     CalendarData *d = (CalendarData *)(self + 1);
     memset(out, 0, sizeof(*out));
@@ -68,6 +60,7 @@ static void calendar_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult calendar_handle_event(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     CalendarData *d = (CalendarData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     int dim = days_in_month(d->year, d->month);

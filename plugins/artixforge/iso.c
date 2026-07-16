@@ -110,6 +110,7 @@ static void iso_render(Widget *self, Rect area, RenderTree *out) {
 }
 
 static EventResult iso_handle(Widget *self, Event *ev, Backend *backend) {
+    (void)backend;
     IsoData *d = (IsoData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
     if (d->mode == 1) {
@@ -155,7 +156,8 @@ Widget *iso_factory(const WidgetRequest *req) {
     w->vtable.render = iso_render; w->vtable.handle_event = iso_handle;
     w->vtable.is_dirty = iso_is_dirty; w->vtable.clear_dirty = iso_clear_dirty; w->vtable.destroy = iso_destroy;
     IsoData *d = (IsoData *)(w + 1);
-    d->title = strdup(cJSON_GetObjectItem(req->params, "title")->valuestring ?: "ISO Builder");
+    cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
+    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "ISO Builder");
     d->cat_count = 0; d->cat_names = NULL; d->item_ids = NULL; d->item_values = NULL; d->item_counts = NULL;
     d->cat_idx = 0; d->item_idx = 0; d->keys = NULL; d->vals = NULL; d->val_count = 0;
     d->mode = 0; d->dirty = true;
@@ -168,7 +170,8 @@ Widget *iso_factory(const WidgetRequest *req) {
         d->item_counts = malloc(d->cat_count * sizeof(int));
         int ci = 0; cJSON *cat;
         cJSON_ArrayForEach(cat, cats) {
-            d->cat_names[ci] = strdup(cJSON_GetObjectItem(cat, "label")->valuestring ?: "");
+            cJSON *cat_label = cJSON_GetObjectItem(cat, "label");
+            d->cat_names[ci] = strdup(cat_label && cat_label->valuestring ? cat_label->valuestring : "");
             cJSON *items = cJSON_GetObjectItem(cat, "items");
             int ic = items ? cJSON_GetArraySize(items) : 0;
             d->item_counts[ci] = ic;
@@ -176,8 +179,10 @@ Widget *iso_factory(const WidgetRequest *req) {
             d->item_values[ci] = malloc(ic * sizeof(char *));
             int ii = 0; cJSON *item;
             cJSON_ArrayForEach(item, items) {
-                const char *id = cJSON_GetObjectItem(item, "id")->valuestring ?: "";
-                const char *val = cJSON_GetObjectItem(item, "value")->valuestring ?: "";
+                cJSON *id_j = cJSON_GetObjectItem(item, "id");
+                cJSON *val_j = cJSON_GetObjectItem(item, "value");
+                const char *id = id_j && id_j->valuestring ? id_j->valuestring : "";
+                const char *val = val_j && val_j->valuestring ? val_j->valuestring : "";
                 d->item_ids[ci][ii] = strdup(id); d->item_values[ci][ii] = strdup(val);
                 iso_set(d, id, val);
                 ii++;
