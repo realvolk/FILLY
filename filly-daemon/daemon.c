@@ -181,15 +181,19 @@ static void *handle_client(void *arg) {
             backend.data = &t;
         }
 
+        fprintf(stderr, "handle_client: widget=%s relay=%d\n", req->widget, req->relay);
         Widget *w = widget_registry_create(req);
+        fprintf(stderr, "handle_client: widget=%p\n", (void*)w);
         WidgetResponse resp;
         if (w) {
+            fprintf(stderr, "handle_client: entering session_run\n");
             if (socket_mode) {
                 char init[32];
                 int l = snprintf(init, sizeof(init), "SIZE 80 24\n");
                 write(fd, init, l);
             }
             resp = session_run(w, &backend);
+            fprintf(stderr, "handle_client: session_run returned\n");
             widget_destroy(w);
         } else {
             resp.result = NULL;
@@ -219,9 +223,11 @@ bool daemon_run(const char *socket_path) {
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) { close(fd); return false; }
     if (listen(fd, 5) < 0) { close(fd); return false; }
+    fprintf(stderr, "daemon: listening on %s\n", socket_path);
     while (1) {
         int client = accept(fd, NULL, NULL);
         if (client < 0) continue;
+        fprintf(stderr, "daemon: client connected, fd=%d\n", client);
         pthread_t tid;
         pthread_create(&tid, NULL, handle_client, (void *)(intptr_t)client);
         pthread_detach(tid);
