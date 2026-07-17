@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/select.h>
+#include <sys/ioctl.h>
 #include <signal.h>
 #include "../filly-core/event.h"
 
@@ -147,6 +148,13 @@ int relay_main(const char *sock_path) {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
     tcsetattr(tty_fd, TCSAFLUSH, &raw);
+
+    struct winsize ws;
+    if (ioctl(tty_fd, TIOCGWINSZ, &ws) == 0) {
+        char size_buf[32];
+        int sl = snprintf(size_buf, sizeof(size_buf), "SIZE %d %d\n", ws.ws_col, ws.ws_row);
+        write(fd, size_buf, sl);
+    }
 
     char buf[524288];
     while (1) {

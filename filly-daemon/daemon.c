@@ -86,39 +86,23 @@ static BackendVTable socket_vtable = {
 
 void load_plugins(void) {
     const char *home = getenv("HOME");
-    if (!home) {
-        fprintf(stderr, "load_plugins: HOME not set\n");
-        return;
-    }
+    if (!home) return;
     char path[1024];
     snprintf(path, sizeof(path), "%s/.config/filly/plugins", home);
-    fprintf(stderr, "load_plugins: scanning %s\n", path);
     DIR *d = opendir(path);
-    if (!d) {
-        fprintf(stderr, "load_plugins: cannot open %s\n", path);
-        return;
-    }
+    if (!d) return;
     struct dirent *entry;
     while ((entry = readdir(d))) {
         int len = strlen(entry->d_name);
         if (len > 3 && strcmp(entry->d_name + len - 3, ".so") == 0) {
             char full[2048];
             snprintf(full, sizeof(full), "%s/%s", path, entry->d_name);
-            fprintf(stderr, "load_plugins: loading %s\n", full);
             void *lib = dlopen(full, RTLD_NOW);
-            if (!lib) {
-                fprintf(stderr, "load_plugins: dlopen failed for %s: %s\n", full, dlerror());
-                continue;
+            if (lib) {
+                void (*reg)(void (*)(const char *, WidgetFactory));
+                *(void **)(&reg) = dlsym(lib, "register_plugins");
+                if (reg) reg(widget_registry_register);
             }
-            void (*reg)(void (*)(const char *, WidgetFactory));
-            *(void **)(&reg) = dlsym(lib, "register_plugins");
-            if (!reg) {
-                fprintf(stderr, "load_plugins: dlsym failed for %s: %s\n", full, dlerror());
-                dlclose(lib);
-                continue;
-            }
-            reg(widget_registry_register);
-            fprintf(stderr, "load_plugins: %s loaded successfully\n", full);
         }
     }
     closedir(d);
@@ -141,7 +125,7 @@ static void *handle_client(void *arg) {
             n++;
         }
         if (n == 0) break;
-        fprintf(stderr, "handle_client: raw request (%d bytes): %s\n", n, buf);
+
         WidgetRequest *req = widget_request_parse(buf);
         if (!req) {
             WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "Invalid JSON" };
@@ -181,19 +165,15 @@ static void *handle_client(void *arg) {
             backend.data = &t;
         }
 
-        fprintf(stderr, "handle_client: widget=%s relay=%d\n", req->widget, req->relay);
         Widget *w = widget_registry_create(req);
-        fprintf(stderr, "handle_client: widget=%p\n", (void*)w);
         WidgetResponse resp;
         if (w) {
-            fprintf(stderr, "handle_client: entering session_run\n");
             if (socket_mode) {
                 char init[32];
                 int l = snprintf(init, sizeof(init), "SIZE 80 24\n");
                 write(fd, init, l);
             }
             resp = session_run(w, &backend);
-            fprintf(stderr, "handle_client: session_run returned\n");
             widget_destroy(w);
         } else {
             resp.result = NULL;
@@ -223,11 +203,9 @@ bool daemon_run(const char *socket_path) {
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) { close(fd); return false; }
     if (listen(fd, 5) < 0) { close(fd); return false; }
-    fprintf(stderr, "daemon: listening on %s\n", socket_path);
     while (1) {
         int client = accept(fd, NULL, NULL);
         if (client < 0) continue;
-        fprintf(stderr, "daemon: client connected, fd=%d\n", client);
         pthread_t tid;
         pthread_create(&tid, NULL, handle_client, (void *)(intptr_t)client);
         pthread_detach(tid);
