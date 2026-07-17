@@ -148,6 +148,13 @@ int relay_main(const char *sock_path) {
     int tty_fd = open("/dev/tty", O_RDWR);
     if (tty_fd < 0) return 1;
 
+    struct winsize ws;
+    if (ioctl(tty_fd, TIOCGWINSZ, &ws) == 0) {
+        char size_buf[32];
+        int sl = snprintf(size_buf, sizeof(size_buf), "SIZE %d %d\n", ws.ws_col, ws.ws_row);
+        write(fd, size_buf, sl);
+    }
+
     char json[524288];
     int n = read(STDIN_FILENO, json, sizeof(json) - 1);
     if (n <= 0) return 1;
@@ -164,13 +171,6 @@ int relay_main(const char *sock_path) {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
     tcsetattr(tty_fd, TCSAFLUSH, &raw);
-
-    struct winsize ws;
-    if (ioctl(tty_fd, TIOCGWINSZ, &ws) == 0) {
-        char size_buf[32];
-        int sl = snprintf(size_buf, sizeof(size_buf), "SIZE %d %d\n", ws.ws_col, ws.ws_row);
-        write(fd, size_buf, sl);
-    }
 
     char buf[524288];
     while (1) {
