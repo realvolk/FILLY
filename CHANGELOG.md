@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.3 (2026-07-17) — FILLY
+
+### Changed
+- **Relay draws to `/dev/tty`** — DRAW packets write directly to the TTY file descriptor instead of stdout or stderr, preventing ANSI escape sequences from being captured by shell pipelines
+- **Relay sends terminal size before request** — `SIZE` message with actual terminal dimensions sent before the JSON payload, so the daemon renders at the correct size on the first frame
+- **Relay handles Linux console F-keys** — `\033[[A` through `\033[[E` sequences mapped to F1-F5 for physical TTYs and virtual consoles
+
+### Fixed
+- **Hub sub-widget dispatch** — unknown widget types (`user_manager`, `disk`, custom plugins) now fall through to a generic sub-widget path using the full widget registry, instead of being silently ignored
+- **Hub sub-widget result handling** — JSON objects and arrays from sub-widgets are serialized and stored correctly in hub state
+- **Daemon client tracking** — connection acceptance, widget creation, and session lifecycle events logged for debugging
+- **Newline-delimited protocol enforcement** — hub JSON compacted with `jq -c .` before relay transmission, preventing multi-line payloads from being split into multiple daemon requests
+
 ## v0.2.2 (2026-07-16) — FILLY
 
 ### Changed
