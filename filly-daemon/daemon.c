@@ -141,7 +141,7 @@ static void *handle_client(void *arg) {
             n++;
         }
         if (n == 0) break;
-
+        fprintf(stderr, "handle_client: raw request (%d bytes): %s\n", n, buf);
         WidgetRequest *req = widget_request_parse(buf);
         if (!req) {
             WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "Invalid JSON" };
