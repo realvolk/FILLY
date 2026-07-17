@@ -177,7 +177,7 @@ int relay_main(const char *sock_path) {
                     if (r <= 0) goto done;
                     total += r;
                 }
-                write(STDERR_FILENO, buf, len);
+                write(tty_fd, buf, len);
                 read(fd, buf, 1);
             } else if (strncmp(line, "SIZE ", 5) == 0) {
             } else {
