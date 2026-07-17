@@ -48,10 +48,26 @@ static void parse_and_send_key(int tty_fd, int sock_fd) {
     if (c2 < 0) { send_key(sock_fd, KEY_ESC, 0); return; }
 
     if (c2 == '[') {
-        char params[16] = {0};
-        int pi = 0;
         int c3 = read_byte_timeout(tty_fd, 20);
         if (c3 < 0) { send_key(sock_fd, KEY_ESC, 0); return; }
+
+        if (c3 == '[') {
+            int c4 = read_byte_timeout(tty_fd, 20);
+            if (c4 < 0) { send_key(sock_fd, KEY_ESC, 0); return; }
+            KeyCode code = KEY_NULL;
+            switch (c4) {
+                case 'A': code = KEY_F1; break;
+                case 'B': code = KEY_F2; break;
+                case 'C': code = KEY_F3; break;
+                case 'D': code = KEY_F4; break;
+                case 'E': code = KEY_F5; break;
+            }
+            if (code != KEY_NULL) send_key(sock_fd, code, 0);
+            return;
+        }
+
+        char params[16] = {0};
+        int pi = 0;
 
         while (pi < 15) {
             if ((c3 >= '0' && c3 <= '9') || c3 == ';') {

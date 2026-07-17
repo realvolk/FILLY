@@ -41,6 +41,7 @@ typedef enum {
     HUB_EDITING_YESNO,
     HUB_EDITING_FILTER,
     HUB_EDITING_MULTISELECT,
+    HUB_EDITING_SUB_WIDGET,
     HUB_CONFIRM_PROCEED,
     HUB_CONFIRM_QUIT
 } HubMode;
@@ -71,6 +72,9 @@ typedef struct {
     bool *edit_selected_set;
     int edit_min_sel;
     int edit_max_sel;
+
+    Widget *sub_widget;
+    WidgetRequest sub_req;
 
     bool dirty;
 } HubData;
@@ -201,7 +205,6 @@ static void hub_update_filter(HubData *d, char **choices, int count) {
 }
 
 static void hub_apply_profile(HubData *d, const char *key, const char *variant) {
-    /* Default baseline */
     hub_set(d, "FS_TYPE", "ext4");
     hub_set(d, "BOOTLOADER", "grub");
     hub_set(d, "KERNEL_CHOICE", "linux");
@@ -378,7 +381,6 @@ static void hub_apply_profile(HubData *d, const char *key, const char *variant) 
     if (pf->power_user)          hub_set(d, "POWER_USER", pf->power_user);
     if (pf->swap_enabled)        hub_set(d, "SWAP_ENABLED", pf->swap_enabled);
 
-    /* Extras with Full variant support */
     bool is_full = (variant && strcmp(variant, "Full") == 0);
     if (is_full && pf->extras_full) {
         hub_set(d, "EXTRAS", pf->extras_full);
@@ -403,6 +405,7 @@ static void hub_enter_edit(HubData *d, HubItem *item) {
     if (!current) current = item->value;
 
     if (item->disk_picker) {
+        free(item->widget);
         item->widget = strdup("menu");
         char *disks_json = get_disks();
         cJSON *disks_arr = cJSON_Parse(disks_json);
@@ -459,11 +462,35 @@ static void hub_enter_edit(HubData *d, HubItem *item) {
         hub_update_filter(d, item->choices, item->choice_count);
         d->edit_selected = 0;
         d->mode = HUB_EDITING_MULTISELECT;
+    } else {
+        memset(&d->sub_req, 0, sizeof(d->sub_req));
+        d->sub_req.widget = item->widget;
+        d->sub_req.params = cJSON_CreateObject();
+        cJSON_AddStringToObject(d->sub_req.params, "title", item->label);
+        if (item->message && strlen(item->message))
+            cJSON_AddStringToObject(d->sub_req.params, "message", item->message);
+        if (current && strlen(current))
+            cJSON_AddStringToObject(d->sub_req.params, "default", current);
+        if (item->placeholder && strlen(item->placeholder))
+            cJSON_AddStringToObject(d->sub_req.params, "placeholder", item->placeholder);
+        if (item->choice_count > 0) {
+            cJSON *ch = cJSON_CreateArray();
+            for (int i = 0; i < item->choice_count; i++)
+                cJSON_AddItemToArray(ch, cJSON_CreateString(item->choices[i]));
+            cJSON_AddItemToObject(d->sub_req.params, "choices", ch);
+        }
+        d->sub_widget = widget_registry_create(&d->sub_req);
+        d->mode = HUB_EDITING_SUB_WIDGET;
     }
     d->dirty = true;
 }
 
 static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) {
+        d->sub_widget->vtable.render(d->sub_widget, area, out);
+        return;
+    }
+
     int ow = (int)(area.w * 0.55f);
     int oh = (int)(area.h * 0.60f);
     if (ow > area.w - 4) ow = area.w - 4;
@@ -748,6 +775,11 @@ static void hub_render(Widget *self, Rect area, RenderTree *out) {
     HubData *d = (HubData *)(self + 1);
     memset(out, 0, sizeof(*out));
 
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) {
+        d->sub_widget->vtable.render(d->sub_widget, area, out);
+        return;
+    }
+
     if (d->mode >= HUB_EDITING_MENU && d->mode <= HUB_EDITING_MULTISELECT) {
         hub_render_overlay(d, area, out);
         return;
@@ -864,6 +896,36 @@ static void hub_render(Widget *self, Rect area, RenderTree *out) {
 
 static EventResult hub_handle_edit_event(HubData *d, Event *ev) {
     if (ev->type != EVENT_KEY) return event_result_unhandled();
+
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) {
+        EventResult r = d->sub_widget->vtable.handle_event(d->sub_widget, ev, NULL);
+        if (r.type == EVENT_RESULT_RESPONSE) {
+            HubItem *item = hub_get_item(d, NULL);
+            if (item && !r.response.cancelled && r.response.result) {
+                if (r.response.result->valuestring)
+                    hub_set(d, item->id, r.response.result->valuestring);
+                else if (r.response.result->type == cJSON_True)
+                    hub_set(d, item->id, "yes");
+                else if (r.response.result->type == cJSON_False)
+                    hub_set(d, item->id, "no");
+                else if (r.response.result->type == cJSON_Array) {
+                    char *joined = cJSON_PrintUnformatted(r.response.result);
+                    hub_set(d, item->id, joined);
+                    free(joined);
+                } else if (r.response.result->type == cJSON_Object) {
+                    char *joined = cJSON_PrintUnformatted(r.response.result);
+                    hub_set(d, item->id, joined);
+                    free(joined);
+                }
+            }
+            widget_destroy(d->sub_widget);
+            d->sub_widget = NULL;
+            cJSON_Delete(d->sub_req.params);
+            d->mode = HUB_BROWSING;
+            d->dirty = true;
+        }
+        return event_result_handled();
+    }
 
     switch (d->mode) {
     case HUB_EDITING_MENU: {
@@ -1055,6 +1117,9 @@ static EventResult hub_handle_event(Widget *self, Event *ev, Backend *backend) {
     HubData *d = (HubData *)(self + 1);
     if (ev->type != EVENT_KEY) return event_result_unhandled();
 
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget)
+        return hub_handle_edit_event(d, ev);
+
     if (d->mode >= HUB_EDITING_MENU && d->mode <= HUB_EDITING_MULTISELECT)
         return hub_handle_edit_event(d, ev);
 
@@ -1108,8 +1173,20 @@ static EventResult hub_handle_event(Widget *self, Event *ev, Backend *backend) {
     }
 }
 
-static bool hub_is_dirty(Widget *self) { return ((HubData *)(self + 1))->dirty; }
-static void hub_clear_dirty(Widget *self) { ((HubData *)(self + 1))->dirty = false; }
+static bool hub_is_dirty(Widget *self) {
+    HubData *d = (HubData *)(self + 1);
+    if (d->dirty) return true;
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget)
+        return d->sub_widget->vtable.is_dirty(d->sub_widget);
+    return false;
+}
+
+static void hub_clear_dirty(Widget *self) {
+    HubData *d = (HubData *)(self + 1);
+    d->dirty = false;
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget)
+        d->sub_widget->vtable.clear_dirty(d->sub_widget);
+}
 
 static void hub_destroy(Widget *self) {
     HubData *d = (HubData *)(self + 1);
@@ -1133,6 +1210,7 @@ static void hub_destroy(Widget *self) {
     free(d->keys); free(d->vals);
     free(d->edit_text); free(d->edit_pass1); free(d->edit_pass2);
     free(d->edit_query); free(d->edit_filtered); free(d->edit_selected_set);
+    if (d->sub_widget) { widget_destroy(d->sub_widget); cJSON_Delete(d->sub_req.params); }
 }
 
 Widget *install_hub_factory(const WidgetRequest *req) {
@@ -1149,6 +1227,7 @@ Widget *install_hub_factory(const WidgetRequest *req) {
     d->cat_idx = 0; d->item_idx = 0;
     d->keys = NULL; d->vals = NULL; d->val_count = 0;
     d->mode = HUB_BROWSING;
+    d->sub_widget = NULL;
     d->edit_text = NULL; d->edit_pass1 = NULL; d->edit_pass2 = NULL;
     d->edit_query = NULL; d->edit_filtered = NULL; d->edit_filtered_count = 0;
     d->edit_selected_set = NULL; d->dirty = true;
