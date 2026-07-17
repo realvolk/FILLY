@@ -7,6 +7,7 @@ extern BackendVTable terminal_vtable;
 #include "../filly-terminal/renderer.h"
 #include "../filly-core/session.h"
 #include "../filly-core/widget.h"
+#include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,8 +31,9 @@ static bool sock_draw(void *self, RenderTree *tree) {
     char buf[524288];
     render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
     int len = strlen(buf);
-    char header[64];
-    int hl = snprintf(header, sizeof(header), "DRAW %d\n", len);
+    char header[128];
+    int hl = snprintf(header, sizeof(header),
+        "{\"type\":\"draw\",\"len\":%d}\n", len);
     write(s->fd, header, hl);
     write(s->fd, buf, len);
     write(s->fd, "\n", 1);
@@ -48,24 +50,27 @@ static Event sock_next_event(void *self) {
         i++;
     }
     Event ev = { .type = EVENT_NONE };
-    if (strncmp(line, "KEY ", 4) == 0) {
-        int code; char ch;
-        if (sscanf(line+4, "%d %c", &code, &ch) == 2) {
+    cJSON *msg = cJSON_Parse(line);
+    if (!msg) return ev;
+    cJSON *type = cJSON_GetObjectItem(msg, "type");
+    if (type && type->valuestring && strcmp(type->valuestring, "key") == 0) {
+        cJSON *code = cJSON_GetObjectItem(msg, "code");
+        cJSON *ch = cJSON_GetObjectItem(msg, "ch");
+        if (code) {
             ev.type = EVENT_KEY;
-            ev.code = (KeyCode)code;
-            ev.ch = ch;
-        } else if (sscanf(line+4, "%d", &code) == 1) {
-            ev.type = EVENT_KEY;
-            ev.code = (KeyCode)code;
-            ev.ch = 0;
+            ev.code = (KeyCode)code->valueint;
+            ev.ch = (ch && ch->valuestring && strlen(ch->valuestring) > 0)
+                 ? ch->valuestring[0] : 0;
         }
-    } else if (strncmp(line, "SIZE ", 5) == 0) {
-        int w, h;
-        if (sscanf(line+5, "%d %d", &w, &h) == 2) {
-            s->term_w = w; s->term_h = h;
-            ev.type = EVENT_RESIZE; ev.w = w; ev.h = h;
+    } else if (type && type->valuestring && strcmp(type->valuestring, "size") == 0) {
+        cJSON *w = cJSON_GetObjectItem(msg, "w");
+        cJSON *h = cJSON_GetObjectItem(msg, "h");
+        if (w && h) {
+            s->term_w = w->valueint; s->term_h = h->valueint;
+            ev.type = EVENT_RESIZE; ev.w = w->valueint; ev.h = h->valueint;
         }
     }
+    cJSON_Delete(msg);
     return ev;
 }
 
@@ -126,8 +131,8 @@ static void *handle_client(void *arg) {
         }
         if (n == 0) break;
 
-        WidgetRequest *req = widget_request_parse(buf);
-        if (!req) {
+        cJSON *msg = cJSON_Parse(buf);
+        if (!msg) {
             WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "Invalid JSON" };
             char *json = widget_response_to_json(&resp);
             write(fd, json, strlen(json)); write(fd, "\n", 1);
@@ -135,13 +140,33 @@ static void *handle_client(void *arg) {
             continue;
         }
 
-        if (strcmp(req->widget, "quit") == 0) {
+        cJSON *type = cJSON_GetObjectItem(msg, "type");
+        if (type && type->valuestring && strcmp(type->valuestring, "size") == 0) {
+            cJSON *w = cJSON_GetObjectItem(msg, "w");
+            cJSON *h = cJSON_GetObjectItem(msg, "h");
+            if (w && h) { sb.term_w = w->valueint; sb.term_h = h->valueint; }
+            cJSON_Delete(msg);
+            continue;
+        }
+
+        if (type && type->valuestring && strcmp(type->valuestring, "quit") == 0) {
+            cJSON_Delete(msg);
             WidgetResponse resp = { .result = NULL, .cancelled = false, .error = NULL };
             char *json = widget_response_to_json(&resp);
             write(fd, json, strlen(json)); write(fd, "\n", 1);
             free(json);
-            widget_request_free(req);
             break;
+        }
+
+        WidgetRequest *req = widget_request_parse(buf);
+        cJSON_Delete(msg);
+
+        if (!req) {
+            WidgetResponse resp = { .result = NULL, .cancelled = true, .error = "Invalid JSON" };
+            char *json = widget_response_to_json(&resp);
+            write(fd, json, strlen(json)); write(fd, "\n", 1);
+            free(json);
+            continue;
         }
 
         socket_mode = req->relay;

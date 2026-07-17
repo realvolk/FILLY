@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 #include "../filly-core/event.h"
+#include "cJSON.h"
 
 static struct termios orig;
 
@@ -25,8 +26,10 @@ static int read_byte_timeout(int fd, int timeout_ms) {
 }
 
 static void send_key(int sock_fd, KeyCode code, char ch) {
-    char header[32];
-    int hl = snprintf(header, sizeof(header), "KEY %d %c\n", (int)code, (int)ch);
+    char header[64];
+    int hl = snprintf(header, sizeof(header),
+        "{\"type\":\"key\",\"code\":%d,\"ch\":\"%c\"}\n",
+        (int)code, (int)ch);
     write(sock_fd, header, hl);
 }
 
@@ -150,8 +153,10 @@ int relay_main(const char *sock_path) {
 
     struct winsize ws;
     if (ioctl(tty_fd, TIOCGWINSZ, &ws) == 0) {
-        char size_buf[32];
-        int sl = snprintf(size_buf, sizeof(size_buf), "SIZE %d %d\n", ws.ws_col, ws.ws_row);
+        char size_buf[64];
+        int sl = snprintf(size_buf, sizeof(size_buf),
+            "{\"type\":\"size\",\"w\":%d,\"h\":%d}\n",
+            ws.ws_col, ws.ws_row);
         write(fd, size_buf, sl);
     }
 
@@ -192,19 +197,29 @@ int relay_main(const char *sock_path) {
                 if (line[i] == '\n') { line[i] = '\0'; break; }
                 i++;
             }
-            if (strncmp(line, "DRAW ", 5) == 0) {
-                int len;
-                sscanf(line + 5, "%d", &len);
-                int total = 0;
-                while (total < len) {
-                    int r = read(fd, buf + total, len - total);
-                    if (r <= 0) goto done;
-                    total += r;
+            cJSON *msg = cJSON_Parse(line);
+            if (!msg) {
+                write(STDOUT_FILENO, line, strlen(line));
+                write(STDOUT_FILENO, "\n", 1);
+                goto done;
+            }
+            cJSON *type = cJSON_GetObjectItem(msg, "type");
+            if (type && type->valuestring && strcmp(type->valuestring, "draw") == 0) {
+                cJSON *len_json = cJSON_GetObjectItem(msg, "len");
+                if (len_json) {
+                    int len = len_json->valueint;
+                    int total = 0;
+                    while (total < len) {
+                        int r = read(fd, buf + total, len - total);
+                        if (r <= 0) { cJSON_Delete(msg); goto done; }
+                        total += r;
+                    }
+                    write(tty_fd, buf, len);
+                    read(fd, buf, 1);
                 }
-                write(tty_fd, buf, len);
-                read(fd, buf, 1);
-            } else if (strncmp(line, "SIZE ", 5) == 0) {
+                cJSON_Delete(msg);
             } else {
+                cJSON_Delete(msg);
                 write(STDOUT_FILENO, line, strlen(line));
                 write(STDOUT_FILENO, "\n", 1);
                 goto done;
