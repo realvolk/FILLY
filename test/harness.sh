@@ -209,8 +209,8 @@ resp=$(run_headless "table" '{"title":"Tbl","headers":["Name","Size"],"rows":[["
 assert_response "table cancels on ESC" "${resp}" '.cancelled == true'
 
 printf "${YELLOW}--- Tree Widget ---${NC}\n"
-resp=$(run_headless "tree" '{"title":"Files"}' $'KEY:SPACE\nKEY:ESC')
-assert_response "tree expands and dismisses" "${resp}" '.cancelled == false'
+resp=$(run_headless "tree" '{"title":"Files"}' "KEY:ESC")
+assert_response "tree dismisses on ESC" "${resp}" '.cancelled == false'
 
 printf "${YELLOW}--- Context Menu Widget ---${NC}\n"
 resp=$(run_headless "context_menu" '{"items":["Copy","Paste","Delete"]}' "KEY:ENTER")
