@@ -11,6 +11,7 @@ SRCS = filly-bin/main.c \
        filly-core/session.c \
        filly-core/store.c \
        filly-core/theme.c \
+       filly-core/relay.c \
        filly-terminal/terminal.c \
        filly-terminal/renderer.c \
        filly-daemon/daemon.c \
@@ -70,6 +71,8 @@ PLUGIN_GFORGE_SRCS = plugins/gforge/plugin.c \
                       plugins/gforge/use_flags.c \
                       plugins/gforge/cflags.c
 
+TEST_SRCS = $(filter-out filly-bin/main.c, $(SRCS))
+
 all: filly plugins
 
 filly: $(SRCS) cJSON.o
@@ -86,13 +89,27 @@ libartixforge.so: $(PLUGIN_ARTIXFORGE_SRCS)
 libgforge.so: $(PLUGIN_GFORGE_SRCS)
 	$(CC) $(CFLAGS) -shared -o $@ $^
 
+filly-test: test/test.c $(TEST_SRCS) cJSON.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+test: filly-test
+	./filly-test
+
 install: all
 	install -Dm755 filly $(PREFIX)/bin/filly
 	mkdir -p $(HOME)/.config/filly/plugins
 	cp libartixforge.so $(HOME)/.config/filly/plugins/
 	cp libgforge.so $(HOME)/.config/filly/plugins/
 
-clean:
-	rm -f filly cJSON.o libartixforge.so libgforge.so
+tools: tools/genkey tools/sign
 
-.PHONY: all plugins install clean
+tools/genkey: tools/genkey.c
+	$(CC) $(CFLAGS) -o $@ $< -lsodium
+
+tools/sign: tools/sign.c
+	$(CC) $(CFLAGS) -o $@ $< -lsodium
+
+clean:
+	rm -f filly cJSON.o libartixforge.so libgforge.so filly-test
+
+.PHONY: all plugins install clean test tools

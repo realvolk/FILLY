@@ -44,6 +44,7 @@
 #include "../filly-core/store.h"
 #include "../filly-daemon/daemon.h"
 #include "../filly-headless/headless.h"
+#include "../filly-core/relay.h"
 
 extern Widget *menu_widget_factory(const WidgetRequest *req);
 extern Widget *yesno_widget_factory(const WidgetRequest *req);
@@ -172,9 +173,9 @@ Widget *checklist_widget_factory(const WidgetRequest *req) {
     for (int i = 0; i < dcount; i++) defaults[i] = strdup(cJSON_GetArrayItem(def, i)->valuestring);
     Widget *w = checklist_widget_new(t ? t->valuestring : "", m ? m->valuestring : "", choices, count,
         min ? min->valueint : 0, max ? max->valueint : count, defaults, dcount);
-    for (int i = 0; i < count; i++) free(choices[i]);
+    for (int i = 0; i < count; i++) { free(choices[i]); }
     free(choices);
-    for (int i = 0; i < dcount; i++) free(defaults[i]);
+    for (int i = 0; i < dcount; i++) { free(defaults[i]); }
     free(defaults);
     return w;
 }
@@ -194,7 +195,7 @@ Widget *filter_widget_factory(const WidgetRequest *req) {
     for (int i = 0; i < count; i++) choices[i] = strdup(cJSON_GetArrayItem(ch, i)->valuestring);
     cJSON *p = cJSON_GetObjectItem(req->params, "placeholder");
     Widget *w = filter_widget_new(t ? t->valuestring : "", m ? m->valuestring : "", choices, count, p ? p->valuestring : NULL);
-    for (int i = 0; i < count; i++) free(choices[i]);
+    for (int i = 0; i < count; i++) { free(choices[i]); }
     free(choices);
     return w;
 }
@@ -211,7 +212,7 @@ Widget *multiselect_widget_factory(const WidgetRequest *req) {
     cJSON *max = cJSON_GetObjectItem(req->params, "max");
     Widget *w = multiselect_widget_new(t ? t->valuestring : "", m ? m->valuestring : "", choices, count,
         p ? p->valuestring : NULL, min ? min->valueint : 0, max ? max->valueint : count);
-    for (int i = 0; i < count; i++) free(choices[i]);
+    for (int i = 0; i < count; i++) { free(choices[i]); }
     free(choices);
     return w;
 }
@@ -245,7 +246,7 @@ Widget *progress_widget_factory(const WidgetRequest *req) {
     for (int i = 0; i < count; i++) command[i] = strdup(cJSON_GetArrayItem(cmd, i)->valuestring);
     cJSON *lf = cJSON_GetObjectItem(req->params, "logfile");
     Widget *w = progress_widget_new(t ? t->valuestring : "", command, count, lf ? lf->valuestring : NULL);
-    for (int i = 0; i < count; i++) free(command[i]);
+    for (int i = 0; i < count; i++) { free(command[i]); }
     free(command);
     return w;
 }
@@ -291,7 +292,7 @@ Widget *table_widget_factory(const WidgetRequest *req) {
         for (int j = 0; j < hc; j++) rows[i][j] = strdup(cJSON_GetArrayItem(row, j)->valuestring);
     }
     Widget *w = table_widget_new(t ? t->valuestring : "", headers, hc, rows, rc);
-    for (int i = 0; i < hc; i++) free(headers[i]);
+    for (int i = 0; i < hc; i++) { free(headers[i]); }
     free(headers);
     for (int i = 0; i < rc; i++) { for (int j = 0; j < hc; j++) free(rows[i][j]); free(rows[i]); }
     free(rows);
@@ -316,7 +317,7 @@ Widget *context_menu_widget_factory(const WidgetRequest *req) {
     char **arr = malloc(count * sizeof(char *));
     for (int i = 0; i < count; i++) arr[i] = strdup(cJSON_GetArrayItem(items, i)->valuestring);
     Widget *w = context_menu_widget_new(arr, count);
-    for (int i = 0; i < count; i++) free(arr[i]);
+    for (int i = 0; i < count; i++) { free(arr[i]); }
     free(arr);
     return w;
 }
@@ -336,7 +337,7 @@ Widget *radio_group_widget_factory(const WidgetRequest *req) {
     for (int i = 0; i < count; i++) choices[i] = strdup(cJSON_GetArrayItem(ch, i)->valuestring);
     cJSON *def = cJSON_GetObjectItem(req->params, "default");
     Widget *w = radio_group_widget_new(t ? t->valuestring : "", m ? m->valuestring : "", choices, count, def ? def->valueint : 0);
-    for (int i = 0; i < count; i++) free(choices[i]);
+    for (int i = 0; i < count; i++) { free(choices[i]); }
     free(choices);
     return w;
 }
@@ -357,7 +358,7 @@ Widget *color_picker_widget_factory(const WidgetRequest *req) {
     char **colors = malloc(count * sizeof(char *));
     for (int i = 0; i < count; i++) colors[i] = strdup(cJSON_GetArrayItem(c, i)->valuestring);
     Widget *w = color_picker_widget_new(t ? t->valuestring : "", colors, count);
-    for (int i = 0; i < count; i++) free(colors[i]);
+    for (int i = 0; i < count; i++) { free(colors[i]); }
     free(colors);
     return w;
 }
@@ -429,7 +430,7 @@ Widget *tabs_widget_factory(const WidgetRequest *req) {
         children[i] = msg_widget_new(labels[i], "");
     }
     Widget *w = tabs_widget_new(t ? t->valuestring : "", labels, count, children, count);
-    for (int i = 0; i < count; i++) free(labels[i]);
+    for (int i = 0; i < count; i++) { free(labels[i]); }
     free(labels); free(children);
     return w;
 }
@@ -456,8 +457,8 @@ static void print_usage(void) {
     fprintf(stderr, "Usage: filly [command]\n");
     fprintf(stderr, "  daemon [--socket path] [--insecure-plugins]\n");
     fprintf(stderr, "  oneshot [--input file] [--events file] [--headless] [--insecure-plugins]\n");
+    fprintf(stderr, "  relay <socket> <json_request>\n");
     fprintf(stderr, "  batch [--input file]\n");
-    fprintf(stderr, "  demo\n");
     fprintf(stderr, "  test [--plugins]\n");
 }
 
@@ -569,15 +570,8 @@ static void run_headless_oneshot(const char *input_path, const char *events_path
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        register_builtin_widgets();
-        TerminalBackend t;
-        terminal_backend_init(&t, NULL);
-        Backend backend = { .vtable = &terminal_vtable, .data = &t };
-        Widget *w = msg_widget_new("FILLY", "No command given. Try 'filly demo'.");
-        session_run(w, &backend);
-        widget_destroy(w);
-        terminal_backend_destroy(&t);
-        return 0;
+        print_usage();
+        return 1;
     }
 
     for (int i = 1; i < argc; i++) {
@@ -593,6 +587,14 @@ int main(int argc, char **argv) {
             if (strcmp(argv[i], "--socket") == 0 && i + 1 < argc) socket = argv[++i];
         }
         return daemon_run(socket) ? 0 : 1;
+    }
+
+    if (strcmp(argv[1], "relay") == 0) {
+        if (argc < 4) {
+            fprintf(stderr, "Usage: filly relay <socket> <json_request>\n");
+            return 1;
+        }
+        return relay_run(argv[2], argv[3]);
     }
 
     if (strcmp(argv[1], "oneshot") == 0) {
@@ -653,138 +655,6 @@ int main(int argc, char **argv) {
         }
         printf("{\"status\":\"ok\",\"builtin_widgets\":33,\"plugins_loaded\":%s}\n",
                test_plugins ? "true" : "false");
-        return 0;
-    }
-
-    if (strcmp(argv[1], "demo") == 0) {
-        TerminalBackend t;
-        terminal_backend_init(&t, NULL);
-        Backend backend = { .vtable = &terminal_vtable, .data = &t };
-        Widget *w;
-
-        w = msg_widget_new("FILLY Demo", "Welcome! Press any key to continue.");
-        session_run(w, &backend); widget_destroy(w);
-
-        w = yesno_widget_new("Yes/No", "Is FILLY-C working?", true);
-        session_run(w, &backend); widget_destroy(w);
-
-        char *menu_choices[] = {"KDE", "XFCE", "Sway", "Hyprland", "i3"};
-        w = menu_widget_new("Menu", "Choose desktop:", menu_choices, 5, 0);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = input_widget_new("Input", "Username:", "artix", "username", NULL);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = password_widget_new("Password", "Secret:", "password");
-        session_run(w, &backend); widget_destroy(w);
-
-        char *check_choices[] = {"git", "neovim", "firefox", "alacritty", "tmux"};
-        char *check_defaults[] = {"git", "neovim"};
-        w = checklist_widget_new("Checklist", "Select packages:", check_choices, 5, 0, 5, check_defaults, 2);
-        session_run(w, &backend); widget_destroy(w);
-
-        char *filter_choices[] = {"Europe/London", "Europe/Belgrade", "America/New_York", "Asia/Tokyo", "Australia/Sydney"};
-        w = filter_widget_new("Filter", "Search timezones:", filter_choices, 5, "Type to filter...");
-        session_run(w, &backend); widget_destroy(w);
-
-        char *ms_choices[] = {"git", "neovim", "firefox", "alacritty", "tmux", "docker", "podman"};
-        w = multiselect_widget_new("Multiselect", "Select packages:", ms_choices, 7, "Search...", 0, 7);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = summary_widget_new("Summary", "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10", NULL);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = file_picker_widget_new("File Picker", getenv("HOME") ? getenv("HOME") : "/", NULL);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = text_editor_widget_new("Text Editor", NULL, "Edit me.\nLine 2\nLine 3");
-        session_run(w, &backend); widget_destroy(w);
-
-        w = toggle_widget_new("Toggle", "Enable feature?", false);
-        session_run(w, &backend); widget_destroy(w);
-
-        cJSON *hub_cats = cJSON_Parse("[{\"label\":\"System\",\"summary_template\":\"Host: {HOSTNAME}\",\"items\":[{\"id\":\"HOSTNAME\",\"label\":\"Hostname\",\"value\":\"artix\",\"widget\":\"input\"},{\"id\":\"INIT\",\"label\":\"Init\",\"value\":\"openrc\",\"widget\":\"menu\",\"choices\":[\"openrc\",\"runit\",\"dinit\",\"s6\"]}]},{\"label\":\"Desktop\",\"summary_template\":\"WM: {WM_DE}\",\"items\":[{\"id\":\"WM_DE\",\"label\":\"WM\",\"value\":\"none\",\"widget\":\"menu\",\"choices\":[\"kde\",\"xfce\",\"sway\",\"hyprland\",\"i3\",\"none\"]}]}]");
-        cJSON *hub_acts = cJSON_Parse("[\"Proceed\"]");
-        WidgetRequest hub_req = { .widget = "hub", .params = cJSON_CreateObject() };
-        cJSON_AddStringToObject(hub_req.params, "title", "Hub");
-        cJSON_AddItemToObject(hub_req.params, "categories", hub_cats);
-        cJSON_AddItemToObject(hub_req.params, "actions", hub_acts);
-        w = widget_registry_create(&hub_req);
-        session_run(w, &backend); widget_destroy(w);
-        cJSON_Delete(hub_req.params);
-
-        char *headers[] = {"Name", "Size", "Type"};
-        char *row1[] = {"firefox", "120MB", "browser"};
-        char *row2[] = {"neovim", "8MB", "editor"};
-        char *row3[] = {"htop", "2MB", "monitor"};
-        char **rows[] = {row1, row2, row3};
-        w = table_widget_new("Table", headers, 3, rows, 3);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = gauge_widget_new("Gauge", 73, "Progress");
-        session_run(w, &backend); widget_destroy(w);
-
-        w = calendar_widget_new("Calendar");
-        session_run(w, &backend); widget_destroy(w);
-
-        FormField fields[3] = {
-            { .label = "Name", .widget_type = "input", .value = "", .placeholder = "Enter name" },
-            { .label = "OS", .widget_type = "menu", .value = "Artix", .placeholder = "" },
-            { .label = "Enable", .widget_type = "toggle", .value = "yes", .placeholder = "" },
-        };
-        w = form_widget_new("Form", fields, 3, "Submit");
-        session_run(w, &backend); widget_destroy(w);
-
-        char *radio_choices[] = {"A", "B", "C"};
-        w = radio_group_widget_new("Radio", "Pick one:", radio_choices, 3, 0);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = range_slider_widget_new("Range Slider", 0, 100, 50, "Volume");
-        session_run(w, &backend); widget_destroy(w);
-
-        char *colors[] = {"red", "green", "blue", "yellow", "magenta", "cyan", "white", "black"};
-        w = color_picker_widget_new("Color Picker", colors, 8);
-        session_run(w, &backend); widget_destroy(w);
-
-        char *ctx_items[] = {"Copy", "Paste", "Delete"};
-        w = context_menu_widget_new(ctx_items, 3);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = notification_widget_new("Toast notification", 2);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = spinner_widget_new("Loading...");
-        session_run(w, &backend); widget_destroy(w);
-
-        w = badge_widget_new("FILLY-C");
-        session_run(w, &backend); widget_destroy(w);
-
-        char *tab_labels[] = {"General", "Advanced", "About"};
-        Widget *tab_children[] = {
-            msg_widget_new("General", "General settings"),
-            msg_widget_new("Advanced", "Advanced settings"),
-            msg_widget_new("About", "FILLY Tabs demo"),
-        };
-        w = tabs_widget_new("Tabs", tab_labels, 3, tab_children, 3);
-        session_run(w, &backend); widget_destroy(w);
-
-        Widget *left = msg_widget_new("Left", "Left pane content");
-        Widget *right = msg_widget_new("Right", "Right pane content");
-        w = split_panes_widget_new(ORIENT_HORIZONTAL, left, right);
-        session_run(w, &backend); widget_destroy(w);
-
-        TreeNode tree_nodes[3] = {
-            { .label = "src", .expanded = true, .children = NULL, .child_count = 0 },
-            { .label = "include", .expanded = false, .children = NULL, .child_count = 0 },
-            { .label = "Makefile", .expanded = false, .children = NULL, .child_count = 0 },
-        };
-        w = tree_widget_new("Tree", tree_nodes, 3);
-        session_run(w, &backend); widget_destroy(w);
-
-        w = msg_widget_new("Done", "All 25 widgets demonstrated.\n\nFILLY-C is operational.");
-        session_run(w, &backend); widget_destroy(w);
-
-        terminal_backend_destroy(&t);
         return 0;
     }
 
