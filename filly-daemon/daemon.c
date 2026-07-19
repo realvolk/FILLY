@@ -79,35 +79,148 @@ static bool sock_draw(void *self, RenderTree *tree) {
 
 static Event sock_next_event(void *self) {
     SocketBackend *s = (SocketBackend *)self;
-    char line[256];
-    int i = 0;
-    while (i < (int)sizeof(line)-1) {
-        if (read(s->fd, line+i, 1) <= 0) { Event ev = {0}; return ev; }
-        if (line[i] == '\n') { line[i] = '\0'; break; }
-        i++;
+    if (s->tty_fd < 0) {
+        Event ev = { .type = EVENT_NONE };
+        return ev;
     }
+
+    fd_set set;
+    FD_ZERO(&set);
+    FD_SET(s->tty_fd, &set);
+    struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 };
+    if (select(s->tty_fd + 1, &set, NULL, NULL, &tv) <= 0) {
+        Event ev = { .type = EVENT_NONE };
+        return ev;
+    }
+
+    unsigned char c;
+    if (read(s->tty_fd, &c, 1) != 1) {
+        Event ev = { .type = EVENT_NONE };
+        return ev;
+    }
+
     Event ev = { .type = EVENT_NONE };
-    cJSON *msg = cJSON_Parse(line);
-    if (!msg) return ev;
-    cJSON *type = cJSON_GetObjectItem(msg, "type");
-    if (type && type->valuestring && strcmp(type->valuestring, "key") == 0) {
-        cJSON *code = cJSON_GetObjectItem(msg, "code");
-        cJSON *ch = cJSON_GetObjectItem(msg, "ch");
-        if (code) {
-            ev.type = EVENT_KEY;
-            ev.code = (KeyCode)code->valueint;
-            ev.ch = (ch && ch->valuestring && strlen(ch->valuestring) > 0)
-                 ? ch->valuestring[0] : 0;
-        }
-    } else if (type && type->valuestring && strcmp(type->valuestring, "size") == 0) {
-        cJSON *w = cJSON_GetObjectItem(msg, "w");
-        cJSON *h = cJSON_GetObjectItem(msg, "h");
-        if (w && h) {
-            s->term_w = w->valueint; s->term_h = h->valueint;
-            ev.type = EVENT_RESIZE; ev.w = w->valueint; ev.h = h->valueint;
-        }
+
+    if (c != '\033') {
+        if (c == '\t') { ev.type = EVENT_KEY; ev.code = KEY_TAB; return ev; }
+        if (c == '\r' || c == '\n') { ev.type = EVENT_KEY; ev.code = KEY_ENTER; return ev; }
+        if (c == 127) { ev.type = EVENT_KEY; ev.code = KEY_BACKSPACE; return ev; }
+        ev.type = EVENT_KEY;
+        ev.code = KEY_CHAR;
+        ev.ch = c;
+        return ev;
     }
-    cJSON_Delete(msg);
+
+    fd_set set2;
+    FD_ZERO(&set2);
+    FD_SET(s->tty_fd, &set2);
+    struct timeval tv2 = { .tv_sec = 0, .tv_usec = 10000 };
+    if (select(s->tty_fd + 1, &set2, NULL, NULL, &tv2) <= 0) {
+        ev.type = EVENT_KEY;
+        ev.code = KEY_ESC;
+        return ev;
+    }
+
+    unsigned char c2;
+    if (read(s->tty_fd, &c2, 1) != 1) {
+        ev.type = EVENT_KEY;
+        ev.code = KEY_ESC;
+        return ev;
+    }
+
+    if (c2 == '[') {
+        char params[16] = {0};
+        int pi = 0;
+        unsigned char c3;
+
+        fd_set set3;
+        FD_ZERO(&set3);
+        FD_SET(s->tty_fd, &set3);
+        struct timeval tv3 = { .tv_sec = 0, .tv_usec = 20000 };
+        if (select(s->tty_fd + 1, &set3, NULL, NULL, &tv3) <= 0) {
+            ev.type = EVENT_KEY; ev.code = KEY_ESC; return ev;
+        }
+        if (read(s->tty_fd, &c3, 1) != 1) {
+            ev.type = EVENT_KEY; ev.code = KEY_ESC; return ev;
+        }
+
+        while (pi < 15) {
+            if (c3 >= '0' && c3 <= '9') {
+                if (pi < 15) params[pi++] = c3;
+            } else if (c3 == ';') {
+                if (pi < 15) params[pi++] = c3;
+            } else if ((c3 >= 'A' && c3 <= 'Z') || (c3 >= 'a' && c3 <= 'z') || c3 == '~') {
+                params[pi] = '\0';
+                if (pi == 0) {
+                    switch (c3) {
+                        case 'A': ev.type = EVENT_KEY; ev.code = KEY_UP; break;
+                        case 'B': ev.type = EVENT_KEY; ev.code = KEY_DOWN; break;
+                        case 'C': ev.type = EVENT_KEY; ev.code = KEY_RIGHT; break;
+                        case 'D': ev.type = EVENT_KEY; ev.code = KEY_LEFT; break;
+                        case 'H': ev.type = EVENT_KEY; ev.code = KEY_HOME; break;
+                        case 'F': ev.type = EVENT_KEY; ev.code = KEY_END; break;
+                        case 'Z': ev.type = EVENT_KEY; ev.code = KEY_BACKTAB; break;
+                    }
+                } else {
+                    int p1 = atoi(params);
+                    if (c3 == '~') {
+                        switch (p1) {
+                            case 1: case 7: ev.type = EVENT_KEY; ev.code = KEY_HOME; break;
+                            case 2: ev.type = EVENT_KEY; ev.code = KEY_INSERT; break;
+                            case 3: ev.type = EVENT_KEY; ev.code = KEY_DELETE; break;
+                            case 4: case 8: ev.type = EVENT_KEY; ev.code = KEY_END; break;
+                            case 5: ev.type = EVENT_KEY; ev.code = KEY_PAGEUP; break;
+                            case 6: ev.type = EVENT_KEY; ev.code = KEY_PAGEDOWN; break;
+                            case 11: ev.type = EVENT_KEY; ev.code = KEY_F1; break;
+                            case 12: ev.type = EVENT_KEY; ev.code = KEY_F2; break;
+                            case 13: ev.type = EVENT_KEY; ev.code = KEY_F3; break;
+                            case 14: ev.type = EVENT_KEY; ev.code = KEY_F4; break;
+                            case 15: ev.type = EVENT_KEY; ev.code = KEY_F5; break;
+                            case 17: ev.type = EVENT_KEY; ev.code = KEY_F6; break;
+                            case 18: ev.type = EVENT_KEY; ev.code = KEY_F7; break;
+                            case 19: ev.type = EVENT_KEY; ev.code = KEY_F8; break;
+                            case 20: ev.type = EVENT_KEY; ev.code = KEY_F9; break;
+                            case 21: ev.type = EVENT_KEY; ev.code = KEY_F10; break;
+                            case 23: ev.type = EVENT_KEY; ev.code = KEY_F11; break;
+                            case 24: ev.type = EVENT_KEY; ev.code = KEY_F12; break;
+                        }
+                    }
+                }
+                return ev;
+            }
+            fd_set set4;
+            FD_ZERO(&set4);
+            FD_SET(s->tty_fd, &set4);
+            struct timeval tv4 = { .tv_sec = 0, .tv_usec = 20000 };
+            if (select(s->tty_fd + 1, &set4, NULL, NULL, &tv4) <= 0) break;
+            if (read(s->tty_fd, &c3, 1) != 1) break;
+        }
+        return ev;
+    }
+
+    if (c2 == 'O') {
+        unsigned char c3;
+        fd_set set5;
+        FD_ZERO(&set5);
+        FD_SET(s->tty_fd, &set5);
+        struct timeval tv5 = { .tv_sec = 0, .tv_usec = 10000 };
+        if (select(s->tty_fd + 1, &set5, NULL, NULL, &tv5) <= 0) {
+            ev.type = EVENT_KEY; ev.code = KEY_ESC; return ev;
+        }
+        if (read(s->tty_fd, &c3, 1) != 1) {
+            ev.type = EVENT_KEY; ev.code = KEY_ESC; return ev;
+        }
+        switch (c3) {
+            case 'P': ev.type = EVENT_KEY; ev.code = KEY_F1; break;
+            case 'Q': ev.type = EVENT_KEY; ev.code = KEY_F2; break;
+            case 'R': ev.type = EVENT_KEY; ev.code = KEY_F3; break;
+            case 'S': ev.type = EVENT_KEY; ev.code = KEY_F4; break;
+        }
+        return ev;
+    }
+
+    ev.type = EVENT_KEY;
+    ev.code = KEY_ESC;
     return ev;
 }
 
