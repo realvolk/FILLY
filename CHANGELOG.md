@@ -28,8 +28,6 @@
 - **`filly test`** — validates that the binary and plugin loading are functional
 - **Test harness: `test/harness.sh`** — 119 behavioral tests covering all 33 built-in widgets plus 9 ArtixForge and 6 GForge plugin widgets; exercises selection, input, validation, cancellation, boundary conditions, visibility conditions, multi-category hub editing, quick profiles, confirmation dialogs, password matching, user add/edit/delete, USE flag toggling, CFLAGS field navigation, and multi-step installer workflows
 - **Headless event file format** — `KEY:<name>` for navigation/function keys, `KEY:SPACE` for space, `TEXT:<string>` for character sequences, `WAIT:<ms>` for delays
-- **`tools/genkey`** — generates an Ed25519 keypair; prints the public key as a C array for embedding in `verify.c` and the secret key as a hex string for offline storage
-- **`tools/sign`** — reads a hex-encoded secret key from `FILLY_SIGN_KEY` environment variable, signs a `.so` file, writes a 64-byte detached signature
 - **`filly_graphical.sh`: 9 missing wrappers** — `filly_graphical_separator`, `install_hub`, `recovery`, `iso`, `migration_init`, `migration_desktop`, `poweruser`, `password_confirm`, `user_manager`
 
 ### Fixed
