@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <limits.h>
 
 typedef struct {
     char *title;
@@ -21,7 +22,31 @@ typedef struct {
     bool dirty;
 } ProgressData;
 
+static bool progress_command_allowed(char **command, int cmd_count) {
+    if (cmd_count < 1 || !command[0]) return false;
+    char resolved[PATH_MAX];
+    if (!realpath(command[0], resolved)) return false;
+    const char *allowed[] = {
+        "/usr/bin/",
+        "/usr/sbin/",
+        "/bin/",
+        "/sbin/",
+        NULL
+    };
+    for (int i = 0; allowed[i]; i++) {
+        size_t len = strlen(allowed[i]);
+        if (strncmp(resolved, allowed[i], len) == 0 &&
+            (resolved[len] == '/' || resolved[len] == '\0'))
+            return true;
+    }
+    return false;
+}
+
 static void progress_start(ProgressData *d) {
+    if (!progress_command_allowed(d->command, d->cmd_count)) {
+        d->output = strdup("Command not allowed\n");
+        return;
+    }
     if (pipe(d->pipe_fd) < 0) return;
     pid_t pid = fork();
     if (pid == 0) {
@@ -58,16 +83,13 @@ static void progress_update(ProgressData *d) {
     }
     int status;
     if (waitpid(d->child_pid, &status, WNOHANG) > 0) {
-        d->progress = 100;
-        d->stage = "Complete";
-        close(d->pipe_fd[0]);
-        d->child_pid = 0;
+        d->progress = 100; d->stage = "Complete"; close(d->pipe_fd[0]); d->child_pid = 0;
     }
 }
 
 static void progress_render(Widget *self, Rect area, RenderTree *out) {
     ProgressData *d = (ProgressData *)(self + 1);
-    if (d->child_pid == 0 && d->output == NULL) progress_start(d);
+    if (d->child_pid == 0 && d->output != NULL && strlen(d->output) == 0) progress_start(d);
     if (d->child_pid > 0) progress_update(d);
     memset(out, 0, sizeof(*out));
     int box_w = (int)(area.w * 0.8f);
@@ -76,6 +98,9 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "Progress");
+
     RenderTree *children = calloc(4 + 1, sizeof(RenderTree));
     int idx = 0;
     children[idx].type = RNODE_TEXT;
@@ -83,6 +108,8 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
     children[idx].text.content = strdup(d->title);
     children[idx].text.align = ALIGN_CENTER;
     children[idx].text.style = textstyle_selected();
+    children[idx].accessible.role = strdup("heading");
+    children[idx].accessible.label = strdup(d->title);
     idx++;
 
     if (d->show_raw) {
@@ -99,7 +126,6 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
         children[idx].gauge.label = d->stage ? strdup(d->stage) : strdup("");
         children[idx].gauge.style = textstyle_accent();
         idx++;
-
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 4, box_w - 2, box_h - 6);
         char *recent = d->output ? strdup(d->output) : strdup("");
@@ -108,7 +134,6 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
         children[idx].text.style = textstyle_muted();
         idx++;
     }
-
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
     children[idx].text.content = strdup("[Tab] toggle raw  [Esc] cancel");
@@ -132,13 +157,10 @@ static EventResult progress_handle_event(Widget *self, Event *ev, Backend *backe
         case KEY_ESC:
             if (d->child_pid > 0) { kill(d->child_pid, SIGTERM); d->child_pid = 0; }
             return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true, .error = NULL });
-        case KEY_TAB:
-            d->show_raw = !d->show_raw;
-            d->dirty = true;
-            return event_result_handled();
+        case KEY_TAB: d->show_raw = !d->show_raw; d->dirty = true; return event_result_handled();
         default:
             d->dirty = true;
-            if (d->child_pid == 0 && d->output)
+            if (d->child_pid == 0 && d->output && strlen(d->output) > 0)
                 return event_result_response((WidgetResponse){ .result = cJSON_CreateString(d->output), .cancelled = false, .error = NULL });
             return event_result_handled();
     }
@@ -167,12 +189,8 @@ Widget *progress_widget_new(const char *title, char **command, int cmd_count, co
     for (int i = 0; i < cmd_count; i++) d->command[i] = strdup(command[i]);
     d->cmd_count = cmd_count;
     d->logfile = logfile ? strdup(logfile) : NULL;
-    d->output = NULL;
-    d->progress = 0;
-    d->stage = "Starting...";
-    d->show_raw = false;
-    d->cancelled = false;
-    d->child_pid = 0;
-    d->dirty = true;
+    d->output = strdup("");
+    d->progress = 0; d->stage = "Starting..."; d->show_raw = false; d->cancelled = false;
+    d->child_pid = 0; d->dirty = true;
     return w;
 }

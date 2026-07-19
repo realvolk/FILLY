@@ -10,6 +10,7 @@ typedef struct {
     char *session_id;
     char *tty;
     bool relay;
+    bool headless;
 } WidgetRequest;
 
 typedef struct {

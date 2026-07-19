@@ -16,13 +16,13 @@ static void badge_render(Widget *self, Rect area, RenderTree *out) {
     out->badge.text = strdup(d->text);
     TextStyle s = { .fg = strdup("0"), .bg = strdup("2"), .bold = true };
     out->badge.style = s;
+    out->accessible.role = strdup("status");
+    out->accessible.label = strdup(d->text);
 }
 
 static EventResult badge_handle_event(Widget *self, Event *ev, Backend *backend) {
-    (void)self;
-    (void)backend;
-    if (ev->type == EVENT_KEY)
-        return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
+    (void)self; (void)backend;
+    if (ev->type == EVENT_KEY) return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
     return event_result_unhandled();
 }
 
@@ -32,13 +32,8 @@ static void badge_destroy(Widget *self) { free(((BadgeData *)(self + 1))->text);
 
 Widget *badge_widget_new(const char *text) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(BadgeData));
-    w->vtable.render = badge_render;
-    w->vtable.handle_event = badge_handle_event;
-    w->vtable.is_dirty = badge_is_dirty;
-    w->vtable.clear_dirty = badge_clear_dirty;
-    w->vtable.destroy = badge_destroy;
-    BadgeData *d = (BadgeData *)(w + 1);
-    d->text = strdup(text);
-    d->dirty = true;
+    w->vtable.render = badge_render; w->vtable.handle_event = badge_handle_event;
+    w->vtable.is_dirty = badge_is_dirty; w->vtable.clear_dirty = badge_clear_dirty; w->vtable.destroy = badge_destroy;
+    BadgeData *d = (BadgeData *)(w + 1); d->text = strdup(text); d->dirty = true;
     return w;
 }

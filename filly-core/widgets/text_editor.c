@@ -76,6 +76,9 @@ static void text_editor_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("document");
+    out->accessible.label = strdup(d->title ? d->title : "Text Editor");
+
     RenderTree *children = calloc(5, sizeof(RenderTree));
 
     children[0].type = RNODE_TEXT;
@@ -88,6 +91,8 @@ static void text_editor_render(Widget *self, Rect area, RenderTree *out) {
     children[0].text.content = strdup(title_buf);
     children[0].text.align = ALIGN_CENTER;
     children[0].text.style = textstyle_selected();
+    children[0].accessible.role = strdup("heading");
+    children[0].accessible.label = strdup(title_buf);
 
     char *display_text = strdup("");
     int end = d->scroll + d->visible_h;
@@ -103,6 +108,7 @@ static void text_editor_render(Widget *self, Rect area, RenderTree *out) {
     children[1].text.content = display_text;
     children[1].text.align = ALIGN_LEFT;
     children[1].text.style = textstyle_normal();
+    children[1].accessible.role = strdup("textbox");
 
     children[2].type = RNODE_TEXT;
     children[2].rect = rect_new(1, box_h - 3, box_w - 2, 1);
@@ -147,139 +153,87 @@ static EventResult text_editor_handle_event(Widget *self, Event *ev, Backend *ba
             free(full);
             return event_result_response((WidgetResponse){ .result = result, .cancelled = false, .error = NULL });
         }
-
         case KEY_UP:
             if (d->row > 0) d->row--;
             te_clamp_cursor(d);
             d->dirty = true;
             return event_result_handled();
-
         case KEY_DOWN:
             if (d->row + 1 < d->line_count) d->row++;
             te_clamp_cursor(d);
             d->dirty = true;
             return event_result_handled();
-
         case KEY_LEFT:
             if (d->col > 0) d->col--;
             else if (d->row > 0) { d->row--; d->col = strlen(d->lines[d->row]); }
             te_clamp_cursor(d);
             d->dirty = true;
             return event_result_handled();
-
         case KEY_RIGHT:
             if (d->col < (int)strlen(d->lines[d->row])) d->col++;
             else if (d->row + 1 < d->line_count) { d->row++; d->col = 0; }
             te_clamp_cursor(d);
             d->dirty = true;
             return event_result_handled();
-
-        case KEY_HOME:
-            d->col = 0;
-            d->dirty = true;
-            return event_result_handled();
-
-        case KEY_END:
-            d->col = strlen(d->lines[d->row]);
-            d->dirty = true;
-            return event_result_handled();
-
-        case KEY_PAGEUP:
-            d->row -= d->visible_h;
-            if (d->row < 0) d->row = 0;
-            te_clamp_cursor(d);
-            d->dirty = true;
-            return event_result_handled();
-
-        case KEY_PAGEDOWN:
-            d->row += d->visible_h;
-            if (d->row >= d->line_count) d->row = d->line_count - 1;
-            te_clamp_cursor(d);
-            d->dirty = true;
-            return event_result_handled();
-
+        case KEY_HOME: d->col = 0; d->dirty = true; return event_result_handled();
+        case KEY_END: d->col = strlen(d->lines[d->row]); d->dirty = true; return event_result_handled();
+        case KEY_PAGEUP: d->row -= d->visible_h; if (d->row < 0) d->row = 0; te_clamp_cursor(d); d->dirty = true; return event_result_handled();
+        case KEY_PAGEDOWN: d->row += d->visible_h; if (d->row >= d->line_count) d->row = d->line_count - 1; te_clamp_cursor(d); d->dirty = true; return event_result_handled();
         case KEY_DELETE:
             if (d->col < (int)strlen(d->lines[d->row])) {
-                memmove(d->lines[d->row] + d->col, d->lines[d->row] + d->col + 1,
-                        strlen(d->lines[d->row] + d->col));
+                memmove(d->lines[d->row] + d->col, d->lines[d->row] + d->col + 1, strlen(d->lines[d->row] + d->col));
                 d->dirty = true;
             } else if (d->row + 1 < d->line_count) {
                 int len = strlen(d->lines[d->row]);
                 d->lines[d->row] = realloc(d->lines[d->row], len + strlen(d->lines[d->row + 1]) + 1);
                 strcat(d->lines[d->row], d->lines[d->row + 1]);
                 free(d->lines[d->row + 1]);
-                memmove(&d->lines[d->row + 1], &d->lines[d->row + 2],
-                        (d->line_count - d->row - 2) * sizeof(char *));
-                d->line_count--;
-                d->dirty = true;
+                memmove(&d->lines[d->row + 1], &d->lines[d->row + 2], (d->line_count - d->row - 2) * sizeof(char *));
+                d->line_count--; d->dirty = true;
             }
             return event_result_handled();
-
         case KEY_ENTER: {
             char *rest = strdup(d->lines[d->row] + d->col);
             d->lines[d->row][d->col] = '\0';
             d->line_count++;
             d->lines = realloc(d->lines, d->line_count * sizeof(char *));
-            memmove(&d->lines[d->row + 2], &d->lines[d->row + 1],
-                    (d->line_count - d->row - 2) * sizeof(char *));
+            memmove(&d->lines[d->row + 2], &d->lines[d->row + 1], (d->line_count - d->row - 2) * sizeof(char *));
             d->lines[d->row + 1] = rest;
-            d->row++;
-            d->col = 0;
-            d->dirty = true;
+            d->row++; d->col = 0; d->dirty = true;
             return event_result_handled();
         }
-
         case KEY_BACKSPACE:
             if (d->col > 0) {
-                memmove(d->lines[d->row] + d->col - 1, d->lines[d->row] + d->col,
-                        strlen(d->lines[d->row] + d->col) + 1);
+                memmove(d->lines[d->row] + d->col - 1, d->lines[d->row] + d->col, strlen(d->lines[d->row] + d->col) + 1);
                 d->col--;
             } else if (d->row > 0) {
                 d->col = strlen(d->lines[d->row - 1]);
-                d->lines[d->row - 1] = realloc(d->lines[d->row - 1],
-                        d->col + strlen(d->lines[d->row]) + 1);
+                d->lines[d->row - 1] = realloc(d->lines[d->row - 1], d->col + strlen(d->lines[d->row]) + 1);
                 strcat(d->lines[d->row - 1], d->lines[d->row]);
                 free(d->lines[d->row]);
-                memmove(&d->lines[d->row], &d->lines[d->row + 1],
-                        (d->line_count - d->row - 1) * sizeof(char *));
-                d->line_count--;
-                d->row--;
+                memmove(&d->lines[d->row], &d->lines[d->row + 1], (d->line_count - d->row - 1) * sizeof(char *));
+                d->line_count--; d->row--;
             }
-            d->dirty = true;
-            return event_result_handled();
-
+            d->dirty = true; return event_result_handled();
         case KEY_CHAR: {
-            if (ev->ch == 19) {
-                te_save(d);
-                d->dirty = true;
-                return event_result_handled();
-            }
+            if (ev->ch == 19) { te_save(d); d->dirty = true; return event_result_handled(); }
             if (ev->ch == 4) {
                 if (d->line_count > 1) {
                     free(d->lines[d->row]);
-                    memmove(&d->lines[d->row], &d->lines[d->row + 1],
-                            (d->line_count - d->row - 1) * sizeof(char *));
-                    d->line_count--;
-                    if (d->row >= d->line_count) d->row = d->line_count - 1;
-                    d->col = 0;
-                    d->dirty = true;
+                    memmove(&d->lines[d->row], &d->lines[d->row + 1], (d->line_count - d->row - 1) * sizeof(char *));
+                    d->line_count--; if (d->row >= d->line_count) d->row = d->line_count - 1; d->col = 0; d->dirty = true;
                 }
                 return event_result_handled();
             }
             if (ev->ch >= 32 || ev->ch == '\t') {
                 int len = strlen(d->lines[d->row]);
                 d->lines[d->row] = realloc(d->lines[d->row], len + 2);
-                memmove(d->lines[d->row] + d->col + 1, d->lines[d->row] + d->col,
-                        len - d->col + 1);
-                d->lines[d->row][d->col] = ev->ch;
-                d->col++;
-                d->dirty = true;
+                memmove(d->lines[d->row] + d->col + 1, d->lines[d->row] + d->col, len - d->col + 1);
+                d->lines[d->row][d->col] = ev->ch; d->col++; d->dirty = true;
             }
             return event_result_handled();
         }
-
-        default:
-            return event_result_unhandled();
+        default: return event_result_unhandled();
     }
 }
 
@@ -287,8 +241,7 @@ static bool te_is_dirty(Widget *self) { return ((TextEditorData *)(self + 1))->d
 static void te_clear_dirty(Widget *self) { ((TextEditorData *)(self + 1))->dirty = false; }
 static void te_destroy(Widget *self) {
     TextEditorData *d = (TextEditorData *)(self + 1);
-    free(d->title);
-    free(d->file_path);
+    free(d->title); free(d->file_path);
     for (int i = 0; i < d->line_count; i++) free(d->lines[i]);
     free(d->lines);
 }
@@ -303,37 +256,21 @@ Widget *text_editor_widget_new(const char *title, const char *file_path, const c
     TextEditorData *d = (TextEditorData *)(w + 1);
     d->title = strdup(title);
     d->file_path = file_path ? strdup(file_path) : NULL;
-    d->lines = NULL;
-    d->line_count = 0;
-
+    d->lines = NULL; d->line_count = 0;
     if (file_path) {
         FILE *f = fopen(file_path, "r");
         if (f) {
             char buf[4096];
             while (fgets(buf, sizeof(buf), f)) {
-                int len = strlen(buf);
-                if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
+                int len = strlen(buf); if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
                 d->lines = realloc(d->lines, (d->line_count + 1) * sizeof(char *));
                 d->lines[d->line_count++] = strdup(buf);
             }
             fclose(f);
         }
     }
-
-    if (d->line_count == 0 && content) {
-        te_split_content(d, content);
-    }
-
-    if (d->line_count == 0) {
-        d->lines = malloc(sizeof(char *));
-        d->lines[0] = strdup("");
-        d->line_count = 1;
-    }
-
-    d->row = 0;
-    d->col = 0;
-    d->scroll = 0;
-    d->visible_h = 20;
-    d->dirty = true;
+    if (d->line_count == 0 && content) te_split_content(d, content);
+    if (d->line_count == 0) { d->lines = malloc(sizeof(char *)); d->lines[0] = strdup(""); d->line_count = 1; }
+    d->row = 0; d->col = d->line_count > 0 ? strlen(d->lines[0]) : 0; d->scroll = 0; d->visible_h = 20; d->dirty = true;
     return w;
 }

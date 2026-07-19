@@ -52,6 +52,9 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "Multiselect");
+
     RenderTree *children = calloc(5 + 1, sizeof(RenderTree));
     int idx = 0;
     if (d->title && strlen(d->title)) {
@@ -60,6 +63,8 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
         children[idx].text.content = strdup(d->title);
         children[idx].text.align = ALIGN_CENTER;
         children[idx].text.style = textstyle_selected();
+        children[idx].accessible.role = strdup("heading");
+        children[idx].accessible.label = strdup(d->title);
         idx++;
     }
     int y = 1;
@@ -69,6 +74,7 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
         children[idx].text.content = strdup(d->message);
         children[idx].text.align = ALIGN_LEFT;
         children[idx].text.style = textstyle_normal();
+        children[idx].accessible.role = strdup("description");
         idx++; y += 2;
     }
     children[idx].type = RNODE_INPUT;
@@ -78,6 +84,8 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
     children[idx].input.cursor = strlen(d->query) + 2;
     children[idx].input.placeholder = d->placeholder ? strdup(d->placeholder) : strdup("Type to filter...");
     children[idx].input.masked = false;
+    children[idx].accessible.role = strdup("searchbox");
+    children[idx].accessible.label = strdup(d->placeholder ? d->placeholder : "Filter");
     idx++; y++;
 
     int list_h = box_h - y - 2;
@@ -93,6 +101,7 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
     }
     children[idx].list.selected = d->cursor;
     children[idx].list.highlight = textstyle_selected();
+    children[idx].accessible.role = strdup("listbox");
     idx++;
 
     int sel_count = 0;

@@ -49,6 +49,9 @@ static void filter_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "Filter");
+
     RenderTree *children = calloc(4 + 1, sizeof(RenderTree));
     int idx = 0;
     if (d->title && strlen(d->title)) {
@@ -58,6 +61,8 @@ static void filter_render(Widget *self, Rect area, RenderTree *out) {
         t->text.content = strdup(d->title);
         t->text.align = ALIGN_CENTER;
         t->text.style = textstyle_selected();
+        t->accessible.role = strdup("heading");
+        t->accessible.label = strdup(d->title);
     }
     RenderTree *search = &children[idx++];
     search->type = RNODE_INPUT;
@@ -67,6 +72,8 @@ static void filter_render(Widget *self, Rect area, RenderTree *out) {
     search->input.cursor = strlen(d->query) + 2;
     search->input.placeholder = d->placeholder ? strdup(d->placeholder) : strdup("Type to filter...");
     search->input.masked = false;
+    search->accessible.role = strdup("searchbox");
+    search->accessible.label = strdup(d->placeholder ? d->placeholder : "Filter");
 
     int list_h = box_h - 3;
     RenderTree *list = &children[idx++];
@@ -78,6 +85,7 @@ static void filter_render(Widget *self, Rect area, RenderTree *out) {
         list->list.items[i] = listitem_new(d->choices[d->filtered[i]]);
     list->list.selected = d->selected;
     list->list.highlight = textstyle_selected();
+    list->accessible.role = strdup("listbox");
 
     RenderTree *footer = &children[idx++];
     footer->type = RNODE_TEXT;

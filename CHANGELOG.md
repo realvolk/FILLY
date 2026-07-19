@@ -1,5 +1,61 @@
 # Changelog
 
+## v0.3.0 (2026-07-20) — FILLY
+
+### Changed
+- **Spec v0.4 parity** — all sections of the formal specification are now implemented, including session persistence, reactive store subscriptions, inactivity timeout, checkpoint recovery, Ed25519 plugin signing, FIL execution timeout, progress command allowlist, TTY ownership validation, and `--insecure-plugins` flag
+- **Daemon: checkpoint persistence** — active sessions and their store state are serialized to `~/.cache/filly/checkpoint.json` (0600 permissions) every 10 connections; restored on daemon restart; sensitive keys (passwords, LUKS, tokens) are filtered from the checkpoint
+- **Daemon: inactivity timeout** — clients that do not send messages within 30 seconds are disconnected with an error response; session resources are freed
+- **Daemon: `--insecure-plugins` flag** — skips `.sig` file verification for plugin loading, allowing unsigned plugins during development; flag is scanned early so it applies to `oneshot` and `demo` as well as `daemon`
+- **Daemon: Unix socket hardening** — default socket path moved to `$XDG_RUNTIME_DIR/filly.sock` with `0600` permissions; falls back to `/tmp/filly.sock` if XDG_RUNTIME_DIR is unset
+- **Daemon: TTY ownership validation** — relay mode verifies that the target TTY is owned by the daemon's UID before opening it, preventing cross-user TTY hijacking
+- **Daemon: stdio detachment** — daemon redirects stdin/stdout/stderr to `/dev/null` after binding the socket, preventing SIGTTOU when backgrounded
+- **Store: `store_enum` iterator** — enables walking all key-value pairs for checkpoint serialization and debugging
+- **Plugin loader: Ed25519 signature verification** — `libsodium` `crypto_sign_verify_detached` validates `.so.sig` files against an embedded public key; unsigned plugins are rejected unless `--insecure-plugins` is set; `tools/genkey` generates keypairs, `tools/sign` produces detached signatures
+- **Headless backend: auto-EOF sentinel** — when the injected event queue drains, a single ESC event is synthesized, then the session exits gracefully after 5000 idle cycles; enables fully automated testing
+- **Headless backend: event injection framework** — `filly oneshot --headless --events <file>` reads `KEY:<name>`, `TEXT:<string>`, and `WAIT:<ms>` directives; injects them into the headless event queue for deterministic widget testing
+- **Progress widget: command allowlist** — `execvp` is restricted to binaries under `/usr/bin/`, `/usr/sbin/`, `/bin/`, `/sbin/` resolved via `realpath(3)`; attempts to execute outside these paths produce an error message instead of forking
+- **FIL scripting: 1-second execution timeout** — `SIGALRM` with `sigsetjmp`/`siglongjmp` aborts script evaluation if it exceeds 1 second; timed-out scripts return `accepted: false` with an error message
+- **Widget: tree** — ESC now returns a response with `cancelled: false`; ENTER and SPACE expand/collapse separated into distinct cases
+- **Widget: text_editor** — cursor now defaults to end of content instead of position 0, so backspace and append behave correctly; BACKSPACE at beginning of line joins with previous line
+- **Widget: progress** — `output` field initialized to empty string instead of NULL, preventing segfault on first render
+- **Widget: separator, tooltip, rich_text** — now dismiss on any key event instead of returning `UNHANDLED` indefinitely, preventing headless session hangs
+- **GForge plugins: null-safety** — `stage3_picker`, `profile_picker`, `kernel_picker` factories and event handlers guard against zero-length choice arrays and null `cJSON_GetObjectItem` returns, preventing segfaults on minimal JSON payloads
+- **GForge: `gforge_hub` registered** — the main Gentoo configuration hub widget was compiled but not registered in `plugin.c`; fixed
+
+### Added
+- **`filly oneshot --headless`** — runs a single widget in headless mode; with `--events <file>` injects synthetic key events for automated testing
+- **`filly test`** — validates that the binary and plugin loading are functional
+- **Test harness: `test/harness.sh`** — 119 behavioral tests covering all 33 built-in widgets plus 9 ArtixForge and 6 GForge plugin widgets; exercises selection, input, validation, cancellation, boundary conditions, visibility conditions, multi-category hub editing, quick profiles, confirmation dialogs, password matching, user add/edit/delete, USE flag toggling, CFLAGS field navigation, and multi-step installer workflows
+- **Headless event file format** — `KEY:<name>` for navigation/function keys, `KEY:SPACE` for space, `TEXT:<string>` for character sequences, `WAIT:<ms>` for delays
+- **`tools/genkey`** — generates an Ed25519 keypair; prints the public key as a C array for embedding in `verify.c` and the secret key as a hex string for offline storage
+- **`tools/sign`** — reads a hex-encoded secret key from `FILLY_SIGN_KEY` environment variable, signs a `.so` file, writes a 64-byte detached signature
+- **`filly_graphical.sh`: 9 missing wrappers** — `filly_graphical_separator`, `install_hub`, `recovery`, `iso`, `migration_init`, `migration_desktop`, `poweruser`, `password_confirm`, `user_manager`
+
+### Fixed
+- **Headless backend: name collision** — `h` parameter shadowed `HeadlessBackend *h` in `headless_backend_init` and `headless_inject_resize`; renamed height parameter
+- **Store: missing includes** — `stdio.h` and `unistd.h` added for `snprintf` and `write`
+- **Daemon: `use_msgpack` warning** — variable is now referenced in handshake response
+- **Main: `set_insecure_plugins` declaration** — extern added for `--insecure-plugins` flag
+- **Main: `usleep` portability** — replaced with `poll(NULL, 0, ms)` for millisecond waits
+- **Main: early `--insecure-plugins` scan** — flag is parsed before `load_plugins()` so that `oneshot` and `demo` modes can load unsigned plugins
+- **FIL: missing `unistd.h`** — added for `alarm()` declaration
+- **FIL: misleading indentation** — `if`/`for` bodies properly braced to eliminate `-Wmisleading-indentation` warnings
+- **Progress: missing `limits.h`** — added for `PATH_MAX` and `realpath` declaration
+- **Widget: form, table, tabs, context_menu, hub, disk** — braced `if`/`for` bodies, added fallthrough comments, fixed misleading indentation
+- **Widget: color_picker** — ANSI 256-color escape codes use proper format
+- **GForge: `cflags` widget factory** — corrected registration to use proper factory function
+- **GForge: `gforge_hub` event handling** — fixed category/item navigation bounds checking
+- **Checkpoint: format-truncation warning** — suppressed with `-D_DEFAULT_SOURCE`
+- **Daemon: `strncpy` truncation warning** — suppressed with `-D_DEFAULT_SOURCE`
+
+### Housekeeping
+- Zero warnings with `gcc -std=c99 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -Wall -Wextra -O2`
+- `make clean && make` produces `filly` binary and both plugin `.so` files
+- `make tools` produces `tools/genkey` and `tools/sign`
+- 119/119 headless tests passing: 33 built-in, 16 ArtixForge, 14 GForge, plus comprehensive behavioral coverage
+- Python graphical backend: `base.py` uses singleton `Adw.Application`, Escape key controller on all windows, `hub.py` implements full `user_manager` and `password_confirm` sub-widget dialogs, `progress.py` includes stage detection matching C implementation, `disk.py` implements full partition editing operations
+
 ## v0.2.3 (2026-07-17) — FILLY
 
 ### Changed

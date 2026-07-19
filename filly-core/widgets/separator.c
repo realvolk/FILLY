@@ -14,10 +14,13 @@ static void separator_render(Widget *self, Rect area, RenderTree *out) {
     out->type = RNODE_SEPARATOR;
     out->rect = area;
     out->separator.orientation = d->orientation;
+    out->accessible.role = strdup("separator");
 }
 
 static EventResult separator_handle_event(Widget *self, Event *ev, Backend *backend) {
-    (void)self; (void)ev; (void)backend;
+    (void)self; (void)backend;
+    if (ev->type == EVENT_KEY && ev->code == KEY_ESC)
+        return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
     return event_result_unhandled();
 }
 

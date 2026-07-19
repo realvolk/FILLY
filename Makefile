@@ -1,11 +1,11 @@
 CC = gcc
-CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -O2 -fPIC -I.
-LDFLAGS = -ldl -lpthread -lm -rdynamic
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -Wall -Wextra -O2 -fPIC -I.
+LDFLAGS = -ldl -lpthread -lm -lsodium -rdynamic
 PREFIX = /usr/local
 
 SRCS = filly-bin/main.c \
-       filly-bin/relay.c \
        filly-protocol/protocol.c \
+       filly-protocol/schema.c \
        filly-core/render.c \
        filly-core/widget.c \
        filly-core/session.c \
@@ -14,6 +14,10 @@ SRCS = filly-bin/main.c \
        filly-terminal/terminal.c \
        filly-terminal/renderer.c \
        filly-daemon/daemon.c \
+       filly-daemon/checkpoint.c \
+       filly-daemon/verify.c \
+       filly-headless/headless.c \
+       filly-script/fil.c \
        filly-core/widgets/menu.c \
        filly-core/widgets/yesno.c \
        filly-core/widgets/input.c \

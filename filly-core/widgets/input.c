@@ -22,6 +22,9 @@ static void input_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "Input");
+
     RenderTree *children = calloc(4 + 1, sizeof(RenderTree));
     int idx = 0;
     if (d->title && strlen(d->title)) {
@@ -31,6 +34,8 @@ static void input_render(Widget *self, Rect area, RenderTree *out) {
         t->text.content = strdup(d->title);
         t->text.align = ALIGN_CENTER;
         t->text.style = textstyle_selected();
+        t->accessible.role = strdup("heading");
+        t->accessible.label = strdup(d->title);
     }
     int input_y = 2;
     if (d->message && strlen(d->message)) {
@@ -40,6 +45,7 @@ static void input_render(Widget *self, Rect area, RenderTree *out) {
         t->text.content = strdup(d->message);
         t->text.align = ALIGN_LEFT;
         t->text.style = textstyle_normal();
+        t->accessible.role = strdup("description");
         input_y = 4;
     }
     RenderTree *inp = &children[idx++];
@@ -49,6 +55,8 @@ static void input_render(Widget *self, Rect area, RenderTree *out) {
     inp->input.cursor = d->cursor;
     inp->input.placeholder = d->placeholder ? strdup(d->placeholder) : strdup("");
     inp->input.masked = false;
+    inp->accessible.role = strdup("textbox");
+    inp->accessible.label = strdup(d->placeholder ? d->placeholder : "Input field");
 
     RenderTree *footer = &children[idx++];
     footer->type = RNODE_TEXT;

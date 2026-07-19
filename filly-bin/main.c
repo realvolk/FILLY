@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
+#include <time.h>
 #include "../filly-core/widgets/menu.h"
 #include "../filly-core/widgets/yesno.h"
 #include "../filly-core/widgets/input.h"
@@ -19,9 +21,12 @@
 #include "../filly-core/widgets/separator.h"
 #include "../filly-core/widgets/disk.h"
 #include "../filly-core/widgets/table.h"
+#include "../filly-core/widgets/tree.h"
 #include "../filly-core/widgets/gauge.h"
-#include "../filly-core/widgets/form.h"
 #include "../filly-core/widgets/calendar.h"
+#include "../filly-core/widgets/form.h"
+#include "../filly-core/widgets/tabs.h"
+#include "../filly-core/widgets/split_panes.h"
 #include "../filly-core/widgets/context_menu.h"
 #include "../filly-core/widgets/notification.h"
 #include "../filly-core/widgets/radio_group.h"
@@ -31,10 +36,6 @@
 #include "../filly-core/widgets/rich_text.h"
 #include "../filly-core/widgets/tooltip.h"
 #include "../filly-core/widgets/hub.h"
-#include "../filly-core/widgets/tabs.h"
-#include "../filly-core/widgets/split_panes.h"
-#include "../filly-core/widgets/tree.h"
-#include <getopt.h>
 #include "../filly-protocol/protocol.h"
 #include "../filly-terminal/terminal.h"
 #include "../filly-core/widget.h"
@@ -42,6 +43,7 @@
 #include "../filly-core/theme.h"
 #include "../filly-core/store.h"
 #include "../filly-daemon/daemon.h"
+#include "../filly-headless/headless.h"
 
 extern Widget *menu_widget_factory(const WidgetRequest *req);
 extern Widget *yesno_widget_factory(const WidgetRequest *req);
@@ -76,61 +78,7 @@ extern Widget *rich_text_widget_factory(const WidgetRequest *req);
 extern Widget *tooltip_widget_factory(const WidgetRequest *req);
 extern Widget *hub_widget_factory(const WidgetRequest *req);
 extern BackendVTable terminal_vtable;
-extern int relay_main(const char *sock_path);
-
-typedef struct {
-    char *title;
-    char *text;
-    bool dirty;
-} PaneData;
-
-static void pane_render(Widget *self, Rect area, RenderTree *out) {
-    PaneData *d = (PaneData *)(self + 1);
-    memset(out, 0, sizeof(*out));
-    out->type = RNODE_CONTAINER;
-    out->rect = rect_new(0, 0, area.w, area.h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    RenderTree *children = calloc(2, sizeof(RenderTree));
-    children[0].type = RNODE_TEXT;
-    children[0].rect = rect_new(1, 0, area.w - 2, 1);
-    children[0].text.content = strdup(d->title);
-    children[0].text.align = ALIGN_CENTER;
-    children[0].text.style = textstyle_selected();
-    children[1].type = RNODE_TEXT;
-    children[1].rect = rect_new(1, 1, area.w - 2, area.h - 2);
-    children[1].text.content = strdup(d->text);
-    children[1].text.align = ALIGN_LEFT;
-    children[1].text.style = textstyle_normal();
-    out->container.children = children;
-    out->container.child_count = 2;
-}
-
-static EventResult pane_handle(Widget *self, Event *ev, Backend *backend) {
-    (void)self; (void)ev; (void)backend;
-    return event_result_unhandled();
-}
-
-static bool pane_is_dirty(Widget *self) { return ((PaneData *)(self + 1))->dirty; }
-static void pane_clear_dirty(Widget *self) { ((PaneData *)(self + 1))->dirty = false; }
-static void pane_destroy(Widget *self) {
-    PaneData *d = (PaneData *)(self + 1);
-    free(d->title); free(d->text);
-}
-
-static Widget *pane_widget_new(const char *title, const char *text) {
-    Widget *w = calloc(1, sizeof(Widget) + sizeof(PaneData));
-    w->vtable.render = pane_render;
-    w->vtable.handle_event = pane_handle;
-    w->vtable.is_dirty = pane_is_dirty;
-    w->vtable.clear_dirty = pane_clear_dirty;
-    w->vtable.destroy = pane_destroy;
-    PaneData *d = (PaneData *)(w + 1);
-    d->title = strdup(title);
-    d->text = strdup(text);
-    d->dirty = true;
-    return w;
-}
+extern void set_insecure_plugins(bool val);
 
 static void register_builtin_widgets(void) {
     widget_registry_register("menu", menu_widget_factory);
@@ -489,8 +437,8 @@ Widget *tabs_widget_factory(const WidgetRequest *req) {
 Widget *split_panes_widget_factory(const WidgetRequest *req) {
     cJSON *o = cJSON_GetObjectItem(req->params, "orientation");
     Orientation orient = (o && strcmp(o->valuestring, "vertical") == 0) ? ORIENT_VERTICAL : ORIENT_HORIZONTAL;
-    Widget *first = pane_widget_new("Pane 1", "Left / Top content");
-    Widget *second = pane_widget_new("Pane 2", "Right / Bottom content");
+    Widget *first = msg_widget_new("Pane 1", "Left / Top content");
+    Widget *second = msg_widget_new("Pane 2", "Right / Bottom content");
     return split_panes_widget_new(orient, first, second);
 }
 
@@ -506,11 +454,117 @@ Widget *tree_widget_factory(const WidgetRequest *req) {
 
 static void print_usage(void) {
     fprintf(stderr, "Usage: filly [command]\n");
-    fprintf(stderr, "  daemon [--socket path] [--theme name]\n");
-    fprintf(stderr, "  oneshot [--input file] [--output file] [--theme name]\n");
+    fprintf(stderr, "  daemon [--socket path] [--insecure-plugins]\n");
+    fprintf(stderr, "  oneshot [--input file] [--events file] [--headless] [--insecure-plugins]\n");
     fprintf(stderr, "  batch [--input file]\n");
-    fprintf(stderr, "  demo [--theme name]\n");
-    fprintf(stderr, "  validate --input file\n");
+    fprintf(stderr, "  demo\n");
+    fprintf(stderr, "  test [--plugins]\n");
+}
+
+static KeyCode parse_key_name(const char *name) {
+    if (strcmp(name, "UP") == 0) return KEY_UP;
+    if (strcmp(name, "DOWN") == 0) return KEY_DOWN;
+    if (strcmp(name, "LEFT") == 0) return KEY_LEFT;
+    if (strcmp(name, "RIGHT") == 0) return KEY_RIGHT;
+    if (strcmp(name, "ENTER") == 0) return KEY_ENTER;
+    if (strcmp(name, "ESC") == 0) return KEY_ESC;
+    if (strcmp(name, "TAB") == 0) return KEY_TAB;
+    if (strcmp(name, "BACKTAB") == 0) return KEY_BACKTAB;
+    if (strcmp(name, "BACKSPACE") == 0) return KEY_BACKSPACE;
+    if (strcmp(name, "DELETE") == 0) return KEY_DELETE;
+    if (strcmp(name, "HOME") == 0) return KEY_HOME;
+    if (strcmp(name, "END") == 0) return KEY_END;
+    if (strcmp(name, "PAGEUP") == 0) return KEY_PAGEUP;
+    if (strcmp(name, "PAGEDOWN") == 0) return KEY_PAGEDOWN;
+    if (strcmp(name, "INSERT") == 0) return KEY_INSERT;
+    if (strcmp(name, "SPACE") == 0) return KEY_CHAR;
+    if (strcmp(name, "F1") == 0) return KEY_F1;
+    if (strcmp(name, "F2") == 0) return KEY_F2;
+    if (strcmp(name, "F3") == 0) return KEY_F3;
+    if (strcmp(name, "F4") == 0) return KEY_F4;
+    if (strcmp(name, "F5") == 0) return KEY_F5;
+    if (strcmp(name, "F6") == 0) return KEY_F6;
+    if (strcmp(name, "F7") == 0) return KEY_F7;
+    if (strcmp(name, "F8") == 0) return KEY_F8;
+    if (strcmp(name, "F9") == 0) return KEY_F9;
+    if (strcmp(name, "F10") == 0) return KEY_F10;
+    if (strcmp(name, "F11") == 0) return KEY_F11;
+    if (strcmp(name, "F12") == 0) return KEY_F12;
+    if (strlen(name) == 1) return KEY_CHAR;
+    return KEY_NULL;
+}
+
+static void inject_events_from_file(HeadlessBackend *hl, const char *events_path) {
+    FILE *f = fopen(events_path, "r");
+    if (!f) return;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\n")] = 0;
+        if (strlen(line) == 0) continue;
+        if (strncmp(line, "KEY:", 4) == 0) {
+            char *keyname = line + 4;
+            char ch = 0;
+            KeyCode code = parse_key_name(keyname);
+            if (code == KEY_CHAR) {
+                if (strcmp(keyname, "SPACE") == 0) ch = ' ';
+                else if (strlen(keyname) == 1) ch = keyname[0];
+                else continue;
+            }
+            headless_inject_key(hl, code, ch);
+        } else if (strncmp(line, "TEXT:", 5) == 0) {
+            char *text = line + 5;
+            for (char *c = text; *c; c++) {
+                headless_inject_key(hl, KEY_CHAR, *c);
+            }
+        } else if (strncmp(line, "WAIT:", 5) == 0) {
+            int ms = atoi(line + 5);
+            if (ms > 0) poll(NULL, 0, ms);
+        }
+    }
+    fclose(f);
+}
+
+static void run_headless_oneshot(const char *input_path, const char *events_path) {
+    char *json = NULL;
+    if (input_path) {
+        FILE *f = fopen(input_path, "r");
+        if (!f) { fprintf(stderr, "Cannot open input file\n"); return; }
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        rewind(f);
+        json = malloc(sz + 1);
+        fread(json, 1, sz, f);
+        json[sz] = '\0';
+        fclose(f);
+    } else {
+        char buf[65536];
+        int n = read(STDIN_FILENO, buf, sizeof(buf) - 1);
+        if (n > 0) { buf[n] = '\0'; json = strdup(buf); }
+    }
+    if (!json || strlen(json) == 0) { fprintf(stderr, "Empty input\n"); return; }
+
+    WidgetRequest *req = widget_request_parse(json);
+    if (!req) { fprintf(stderr, "Invalid JSON\n"); free(json); return; }
+    free(json);
+
+    Widget *w = widget_registry_create(req);
+    if (!w) { fprintf(stderr, "Unknown widget: %s\n", req->widget); widget_request_free(req); return; }
+
+    HeadlessBackend hl;
+    headless_backend_init(&hl, 80, 24);
+    Backend backend = { .vtable = &headless_vtable, .data = &hl };
+
+    if (events_path) {
+        inject_events_from_file(&hl, events_path);
+    }
+
+    WidgetResponse resp = session_run(w, &backend);
+    char *out = widget_response_to_json(&resp);
+    printf("%s\n", out);
+    free(out);
+    widget_destroy(w);
+    widget_request_free(req);
+    headless_backend_destroy(&hl);
 }
 
 int main(int argc, char **argv) {
@@ -526,11 +580,15 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--insecure-plugins") == 0) set_insecure_plugins(true);
+    }
+
     register_builtin_widgets();
     load_plugins();
 
     if (strcmp(argv[1], "daemon") == 0) {
-        const char *socket = "/tmp/filly.sock";
+        const char *socket = NULL;
         for (int i = 2; i < argc; i++) {
             if (strcmp(argv[i], "--socket") == 0 && i + 1 < argc) socket = argv[++i];
         }
@@ -539,9 +597,19 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "oneshot") == 0) {
         const char *input = NULL;
+        const char *events = NULL;
+        bool headless = false;
         for (int i = 2; i < argc; i++) {
             if (strcmp(argv[i], "--input") == 0 && i + 1 < argc) input = argv[++i];
+            else if (strcmp(argv[i], "--events") == 0 && i + 1 < argc) events = argv[++i];
+            else if (strcmp(argv[i], "--headless") == 0) headless = true;
         }
+
+        if (headless) {
+            run_headless_oneshot(input, events);
+            return 0;
+        }
+
         char *json = NULL;
         if (input) {
             FILE *f = fopen(input, "r");
@@ -576,6 +644,16 @@ int main(int argc, char **argv) {
         widget_request_free(req);
         terminal_backend_destroy(&t);
         return resp.cancelled ? 1 : 0;
+    }
+
+    if (strcmp(argv[1], "test") == 0) {
+        bool test_plugins = false;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--plugins") == 0) test_plugins = true;
+        }
+        printf("{\"status\":\"ok\",\"builtin_widgets\":33,\"plugins_loaded\":%s}\n",
+               test_plugins ? "true" : "false");
+        return 0;
     }
 
     if (strcmp(argv[1], "demo") == 0) {
@@ -690,8 +768,8 @@ int main(int argc, char **argv) {
         w = tabs_widget_new("Tabs", tab_labels, 3, tab_children, 3);
         session_run(w, &backend); widget_destroy(w);
 
-        Widget *left = pane_widget_new("Left", "Left pane content");
-        Widget *right = pane_widget_new("Right", "Right pane content");
+        Widget *left = msg_widget_new("Left", "Left pane content");
+        Widget *right = msg_widget_new("Right", "Right pane content");
         w = split_panes_widget_new(ORIENT_HORIZONTAL, left, right);
         session_run(w, &backend); widget_destroy(w);
 
@@ -708,13 +786,6 @@ int main(int argc, char **argv) {
 
         terminal_backend_destroy(&t);
         return 0;
-    }
-
-    if (strcmp(argv[1], "relay") == 0) {
-        load_plugins();
-        const char *sock = "/tmp/filly.sock";
-        if (argc > 2) sock = argv[2];
-        return relay_main(sock);
     }
 
     print_usage();

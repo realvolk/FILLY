@@ -19,20 +19,25 @@ static void toggle_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "Toggle");
+
     RenderTree *children = calloc(3, sizeof(RenderTree));
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
     children[0].text.content = strdup(d->title);
     children[0].text.align = ALIGN_CENTER;
     children[0].text.style = textstyle_selected();
+    children[0].accessible.role = strdup("heading");
+    children[0].accessible.label = strdup(d->title);
 
-    children[1].type = RNODE_TEXT;
+    children[1].type = RNODE_TOGGLE;
     children[1].rect = rect_new(1, 2, box_w - 2, 1);
-    char switch_line[128];
-    snprintf(switch_line, sizeof(switch_line), "[ %s ] %s", d->value ? "ON" : "OFF", d->label);
-    children[1].text.content = strdup(switch_line);
-    children[1].text.align = ALIGN_CENTER;
-    children[1].text.style = textstyle_normal();
+    children[1].toggle.label = strdup(d->label);
+    children[1].toggle.value = d->value;
+    children[1].toggle.focused = d->focused;
+    children[1].accessible.role = strdup("switch");
+    children[1].accessible.label = strdup(d->label);
 
     children[2].type = RNODE_TEXT;
     children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);

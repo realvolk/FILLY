@@ -14,6 +14,7 @@ from .widgets import (
     FormWindow, TabsWindow, SplitPanesWindow, ContextMenuWindow,
     NotificationWindow, RadioGroupWindow, RangeSliderWindow,
     ColorPickerWindow, BadgeWindow, RichTextWindow, TooltipWindow,
+    UserManagerWindow, PasswordConfirmWindow,
 )
 
 class GuiBackend:
@@ -51,6 +52,8 @@ class GuiBackend:
         "badge": BadgeWindow,
         "rich_text": RichTextWindow,
         "tooltip": TooltipWindow,
+        "user_manager": UserManagerWindow,
+        "password_confirm": PasswordConfirmWindow,
     }
 
     _plugins_loaded = False

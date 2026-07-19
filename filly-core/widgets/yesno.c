@@ -18,6 +18,9 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("dialog");
+    out->accessible.label = strdup(d->title ? d->title : "YesNo");
+
     RenderTree *children = calloc(5 + 1, sizeof(RenderTree));
     int idx = 0;
     if (d->title && strlen(d->title)) {
@@ -27,6 +30,8 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
         t->text.content = strdup(d->title);
         t->text.align = ALIGN_CENTER;
         t->text.style = textstyle_selected();
+        t->accessible.role = strdup("heading");
+        t->accessible.label = strdup(d->title);
     }
     if (d->message && strlen(d->message)) {
         RenderTree *t = &children[idx++];
@@ -35,6 +40,7 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
         t->text.content = strdup(d->message);
         t->text.align = ALIGN_CENTER;
         t->text.style = textstyle_normal();
+        t->accessible.role = strdup("description");
     }
     RenderTree *yes = &children[idx++];
     yes->type = RNODE_TEXT;
@@ -42,6 +48,8 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
     yes->text.content = strdup("[ Yes ]");
     yes->text.align = ALIGN_CENTER;
     yes->text.style = d->selected_yes ? textstyle_selected() : textstyle_muted();
+    yes->accessible.role = strdup("button");
+    yes->accessible.label = strdup("Yes");
 
     RenderTree *no = &children[idx++];
     no->type = RNODE_TEXT;
@@ -49,6 +57,8 @@ static void yesno_render(Widget *self, Rect area, RenderTree *out) {
     no->text.content = strdup("[ No ]");
     no->text.align = ALIGN_CENTER;
     no->text.style = d->selected_yes ? textstyle_muted() : textstyle_selected();
+    no->accessible.role = strdup("button");
+    no->accessible.label = strdup("No");
 
     RenderTree *footer = &children[idx++];
     footer->type = RNODE_TEXT;

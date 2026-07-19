@@ -1,5 +1,6 @@
 #include "../../filly-core/widget.h"
 
+extern Widget *gforge_hub_factory(const WidgetRequest *req);
 extern Widget *stage3_factory(const WidgetRequest *req);
 extern Widget *profile_factory(const WidgetRequest *req);
 extern Widget *kernel_factory(const WidgetRequest *req);
@@ -7,6 +8,7 @@ extern Widget *use_flags_factory(const WidgetRequest *req);
 extern Widget *cflags_factory(const WidgetRequest *req);
 
 void register_plugins(void (*reg)(const char *, WidgetFactory)) {
+    reg("gforge_hub", gforge_hub_factory);
     reg("stage3_picker", stage3_factory);
     reg("profile_picker", profile_factory);
     reg("kernel_picker", kernel_factory);

@@ -99,6 +99,11 @@ filly_graphical_spinner() {
     "$FILLY_GRAPHICAL" <<< '{"widget":"spinner","params":{"message":"'"${message//\"/\\\"}"'"}}' >/dev/null
 }
 
+filly_graphical_separator() {
+    local orientation="${1:-horizontal}"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"separator","params":{"orientation":"'"${orientation}"'"}}' >/dev/null
+}
+
 filly_graphical_table() {
     local title="$1"
     shift
@@ -223,4 +228,16 @@ filly_graphical_migration_desktop() {
 filly_graphical_poweruser() {
     local title="$1" categories_json="$2"
     "$FILLY_GRAPHICAL" <<< '{"widget":"poweruser","params":{"title":"'"${title//\"/\\\"}"'","categories":'"$categories_json"'}}' | jq -r '.result // empty'
+}
+
+filly_graphical_password_confirm() {
+    local title="$1" message="${2:-}"
+    local params='"title":"'"${title//\"/\\\"}"'"'
+    [[ -n "$message" ]] && params+=',"message":"'"${message//\"/\\\"}"'"'
+    "$FILLY_GRAPHICAL" <<< '{"widget":"password_confirm","params":{'"$params"'}}' | jq -r '.result // empty'
+}
+
+filly_graphical_user_manager() {
+    local title="$1" users_json="${2:-[]}"
+    "$FILLY_GRAPHICAL" <<< '{"widget":"user_manager","params":{"title":"'"${title//\"/\\\"}"'","users":'"$users_json"'}}' | jq -r '.result // empty'
 }

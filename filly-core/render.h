@@ -61,6 +61,10 @@ typedef struct RenderTree_s RenderTree;
 struct RenderTree_s {
     RenderNodeType type;
     Rect rect;
+    struct {
+        char *role;
+        char *label;
+    } accessible;
     union {
         struct {
             char *bg;

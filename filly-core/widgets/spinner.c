@@ -2,7 +2,6 @@
 #include "spinner.h"
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 typedef struct {
     char *message;
@@ -18,11 +17,16 @@ static void spinner_render(Widget *self, Rect area, RenderTree *out) {
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
+    out->accessible.role = strdup("status");
+    out->accessible.label = strdup(d->message ? d->message : "Spinner");
+
     RenderTree *children = calloc(2, sizeof(RenderTree));
     children[0].type = RNODE_SPINNER;
     children[0].rect = rect_new(1, 1, box_w - 2, 1);
     children[0].spinner.message = strdup(d->message);
     children[0].spinner.frame = d->frame;
+    children[0].accessible.role = strdup("progressbar");
+    children[0].accessible.label = strdup(d->message);
 
     children[1].type = RNODE_TEXT;
     children[1].rect = rect_new(1, box_h - 2, box_w - 2, 1);
@@ -61,7 +65,6 @@ Widget *spinner_widget_new(const char *message) {
     w->vtable.destroy = spinner_destroy;
     SpinnerData *d = (SpinnerData *)(w + 1);
     d->message = strdup(message);
-    d->frame = 0;
-    d->dirty = true;
+    d->frame = 0; d->dirty = true;
     return w;
 }

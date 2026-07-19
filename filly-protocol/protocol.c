@@ -20,6 +20,8 @@ WidgetRequest *widget_request_parse(const char *json_str) {
     if (tty && tty->valuestring) req->tty = strdup(tty->valuestring);
     cJSON *relay = cJSON_GetObjectItem(root, "relay");
     if (relay) req->relay = relay->valueint ? true : false;
+    cJSON *headless = cJSON_GetObjectItem(root, "headless");
+    if (headless) req->headless = headless->valueint ? true : false;
     cJSON_Delete(root);
     return req;
 }
@@ -35,6 +37,7 @@ void widget_request_free(WidgetRequest *req) {
 
 char *widget_response_to_json(WidgetResponse *resp) {
     cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "response");
     if (resp->result) cJSON_AddItemToObject(root, "result", cJSON_Duplicate(resp->result, 1));
     else cJSON_AddNullToObject(root, "result");
     cJSON_AddBoolToObject(root, "cancelled", resp->cancelled ? 1 : 0);

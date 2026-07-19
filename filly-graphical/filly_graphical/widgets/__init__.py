@@ -32,3 +32,5 @@ from .radio_group import RadioGroupWindow
 from .badge import BadgeWindow
 from .rich_text import RichTextWindow
 from .tooltip import TooltipWindow
+from .user_manager import UserManagerWindow
+from .password_confirm import PasswordConfirmWindow

@@ -39,6 +39,8 @@ ListItem listitem_new(const char *label) {
 
 void render_tree_free(RenderTree *tree) {
     if (!tree) return;
+    free(tree->accessible.role);
+    free(tree->accessible.label);
     switch (tree->type) {
     case RNODE_CONTAINER:
         for (int i = 0; i < tree->container.child_count; i++)

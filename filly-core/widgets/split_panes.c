@@ -28,8 +28,7 @@ static void sp_render(Widget *self, Rect area, RenderTree *out) {
 static EventResult sp_handle_event(Widget *self, Event *ev, Backend *backend) {
     SplitPanesData *d = (SplitPanesData *)(self + 1);
     if (ev->type == EVENT_KEY) {
-        if (ev->code == KEY_ESC)
-            return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
+        if (ev->code == KEY_ESC) return event_result_response((WidgetResponse){ .result = NULL, .cancelled = false, .error = NULL });
         if (ev->code == KEY_F1) { d->active_pane = 0; d->dirty = true; return event_result_handled(); }
         if (ev->code == KEY_F2) { d->active_pane = 1; d->dirty = true; return event_result_handled(); }
     }
@@ -40,23 +39,13 @@ static EventResult sp_handle_event(Widget *self, Event *ev, Backend *backend) {
 
 static bool sp_is_dirty(Widget *self) { return ((SplitPanesData *)(self + 1))->dirty; }
 static void sp_clear_dirty(Widget *self) { ((SplitPanesData *)(self + 1))->dirty = false; }
-static void sp_destroy(Widget *self) {
-    SplitPanesData *d = (SplitPanesData *)(self + 1);
-    widget_destroy(d->first); widget_destroy(d->second);
-}
+static void sp_destroy(Widget *self) { SplitPanesData *d = (SplitPanesData *)(self + 1); widget_destroy(d->first); widget_destroy(d->second); }
 
 Widget *split_panes_widget_new(Orientation orientation, Widget *first, Widget *second) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SplitPanesData));
-    w->vtable.render = sp_render;
-    w->vtable.handle_event = sp_handle_event;
-    w->vtable.is_dirty = sp_is_dirty;
-    w->vtable.clear_dirty = sp_clear_dirty;
-    w->vtable.destroy = sp_destroy;
+    w->vtable.render = sp_render; w->vtable.handle_event = sp_handle_event;
+    w->vtable.is_dirty = sp_is_dirty; w->vtable.clear_dirty = sp_clear_dirty; w->vtable.destroy = sp_destroy;
     SplitPanesData *d = (SplitPanesData *)(w + 1);
-    d->orientation = orientation;
-    d->first = first; d->second = second;
-    d->split_position = 0;
-    d->active_pane = 0;
-    d->dirty = true;
+    d->orientation = orientation; d->first = first; d->second = second; d->split_position = 0; d->active_pane = 0; d->dirty = true;
     return w;
 }
