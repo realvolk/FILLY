@@ -1,0 +1,38 @@
+{
+  "name": "Gruvbox Dark",
+  "variables": {
+    "bg": "#282828",
+    "fg": "#ebdbb2",
+    "accent": "#b8bb26",
+    "title-fg": "#fabd2f",
+    "border": "#504945",
+    "muted": "#a89984",
+    "radius": "6"
+  },
+  "global": {
+    "font_size": 14,
+    "fg_color": "$fg",
+    "bg_color": "$bg",
+    "accent_color": "$accent",
+    "border_color": "$border",
+    "border_radius": "$radius",
+    "border_width": 1,
+    "padding": [8, 14, 8, 14]
+  },
+  "widgets": {
+    "text": {
+      "fg_color": "$fg"
+    },
+    "text:title": {
+      "fg_color": "$title-fg",
+      "font_weight": 700
+    },
+    "list": {
+      "bg_color": "$bg"
+    },
+    "list item:selected": {
+      "bg_color": "$accent",
+      "fg_color": "$bg"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Euo pipefail
 
-FILLY="./filly"
+FILLY="../filly"
 PASS=0
 FAIL=0
 TOTAL=0
@@ -281,7 +281,7 @@ resp=$(run_headless "color_picker" '{"title":"Color","colors":[]}' "KEY:ESC")
 assert_response "color_picker cancels on ESC" "${resp}" '.cancelled == true'
 
 printf "${YELLOW}--- Progress Widget ---${NC}\n"
-resp=$(run_headless "progress" '{"title":"Progress","command":["echo","task done"]}' "KEY:ENTER")
+resp=$(run_headless "progress" '{"title":"Progress","command":["echo","task done"]}' $'WAIT:200\nKEY:ENTER')
 assert_response "progress runs command and returns output" "${resp}" '.cancelled == false'
 resp=$(run_headless "progress" '{"title":"Progress","command":["sleep","10"]}' "KEY:ESC")
 assert_response "progress cancels long command" "${resp}" '.cancelled == true'
@@ -336,7 +336,7 @@ resp=$(run_headless "migration_desktop" '{"title":"Desktop Environment Migration
 assert_eq "migration_desktop full config" "${resp}" '{"source":"none","target":"kde","dm":"current","x_stack":"xorg","audio":"current","network":"current"}'
 
 resp=$(run_headless "password_confirm" '{"title":"Set Root Password"}' $'TEXT:secret123\nKEY:TAB\nTEXT:secret123\nKEY:ENTER')
-assert_response "password_confirm matching passwords" "${resp}" '.result == "SHA512:secret123"'
+assert_response "password_confirm matching passwords" "${resp}" '.result | startswith("$6$")'
 
 resp=$(run_headless "password_confirm" '{"title":"Set Root Password"}' $'TEXT:abc\nKEY:TAB\nTEXT:xyz\nKEY:ENTER')
 assert_response "password_confirm mismatch stays in form" "${resp}" '.result == null'

@@ -1,0 +1,15 @@
+#pragma once
+
+#include "core/render.h"
+#include "core/widget.h"
+#include "core/session.h"
+#include "core/theme.h"
+#include "core/client.h"
+#include "core/store.h"
+#include "core/arena.h"
+#include "core/clipboard.h"
+#include "core/undo.h"
+#include "core/log.h"
+#include "core/i18n.h"
+#include "core/widget_base.h"
+#include "protocol/protocol.h"

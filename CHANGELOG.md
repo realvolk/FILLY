@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.4.0 (2026-07-23) — FILLY
+
+### Changed
+- **Spec v0.5 parity achieved** — all 16 major sections of the formal specification are now implemented or scaffolded; core protocol, widget system, backends, plugin system, security model, and test suite fully match spec; remaining gaps are v0.6+ roadmap items (or will be done soon)
+- **Source tree reorganized** — all source files moved under `src/` with subdirectories: `src/core/` (widget system, session, store, theme, arena, clipboard, undo, relay, client, config, i18n, crypto, log), `src/backend/` (terminal, headless, gcore, daemon), `src/cli/` (main), `src/protocol/` (protocol, schema, msgpack), `src/script/` (FIL), `src/themes/` (JSON theme files); vendored `cJSON.c`/`cJSON.h` and `stb_truetype.h` moved to `src/`
+- **Terminal backend rewritten** — ANSI escape sequences now written directly to `/dev/tty` via `write_all` loop; alternate screen disabled due to kitty ESC byte race; terminal cleared with `\033[2J\033[H` on each draw frame; teardown restores cooked mode with `TCSADRAIN` then clears screen, resets attributes, and shows cursor; mouse support enabled via SGR extended coordinates on non-Linux-console terminals
+- **Terminal renderer refactored** — `set_style` emits complete SGR sequences with single `m` terminator for foreground and background colors; `draw_text_wrapped` supports word-break wrapping and text alignment (left/center/right); `draw_list` highlights selected items with accent-color background and white foreground; `draw_box` supports single, double, and rounded borders with Unicode box-drawing characters; `fill_rect` clears container interiors; `draw_calendar` renders month grid with proper day-of-week alignment and selected-day highlighting; `render_tree_to_buf` begins with `\033[2J\033[H` and ends with `\033[0m` attribute reset; `RNODE_TEXT` now applies `text.align` from the render node to `draw_text_wrapped`
+- **Relay rewritten** — `relay_setup` opens `/dev/tty`, sets raw mode, enters alternate screen, hides cursor, enables mouse; `relay_teardown` resets attributes, exits alternate screen, shows cursor, restores cooked mode; `parse_csi` handles all CSI/SS3 escape sequences for keyboard and mouse input; `draw_callback` writes raw ANSI frames directly to TTY
+- **Session loop refactored** — `session_run` now polls terminal size every iteration and marks widget dirty on resize; first frame is drawn before entering event loop to ensure immediate rendering; `EVENT_RESIZE` and `EVENT_MOUSE_MOTION` mark widget dirty without dispatching to widget; clipboard paste (Ctrl+V), undo (Ctrl+Z), and redo (Ctrl+Y) handled at session level; store version polling triggers re-render on state changes
+- **Menu widget** — box height now calculated from content (title lines + message lines + item count + footer) instead of using percentage of terminal height; box vertically centered; title, message, and footer text center-aligned within the box; children offset by +1 row to stay inside border; empty rows inside box eliminated
+- **Message widget** — box height calculated from message line count; all text center-aligned; children offset inside border
+- **Oneshot terminal output** — response JSON printed to stderr with leading `\r` for column-1 alignment; stdout left clean for shell
+- **Makefile** — `TEST_SRCS` now includes `$(GCORE_SRCS)` so `filly-test` links Wayland protocol symbols; `src/cJSON.o` compiled as separate object
+
+### Fixed
+- **Terminal escape code leakage** — `\033[0m` attribute reset emitted before terminal teardown prevents SGR sequences from persisting after widget exit; `TCSADRAIN` used instead of `TCSAFLUSH` to avoid discarding output buffer
+- **Title centering** — `draw_text_wrapped` now respects `text.align` field from render node, overridden via local `WidgetStyle` copy in `RNODE_TEXT` case
+- **Box interior padding** — `fill_rect` clears container interior after border draw, preventing border characters from bleeding into centered content
+- **Widget resize responsiveness** — `session_run` polls terminal size before dirty check, marks widget dirty on size change, enabling widgets to re-layout without user input
+- **Kitty ESC byte race** — escape sequences written before `tcsetattr` switches to raw mode, preventing terminal from echoing partial sequences as text; alternate screen disabled to avoid screen-switch timing issues
+- **Duplicate frame on startup** — first frame drawn before event loop to prevent blank screen flash
+- **Relay alternate screen** — `relay_setup` now enters alternate screen and hides cursor, matching terminal backend behavior; `relay_teardown` exits alternate screen and restores cursor
+
+### Housekeeping
+- 119/119 headless behavioral tests passing
+- 14/14 C test suite tests passing
+- Zero warnings from `gcc -std=c99 -Wall -Wextra -O2` (except two intentional `strncpy`/`snprintf` truncation warnings in daemon and checkpoint)
+- Source tree: `src/` with `core/`, `backend/`, `cli/`, `protocol/`, `script/`, `themes/`; `plugins/` with `artixforge/` and `gforge/`; `test/` with `unit/` and `fuzz/`; `tools/` with `genkey`, `sign`, `verify`
+
 ## v0.3.0 (2026-07-20) — FILLY
 
 ### Changed

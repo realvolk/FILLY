@@ -1,0 +1,38 @@
+{
+  "name": "Catppuccin Mocha",
+  "variables": {
+    "bg": "#1e1e2e",
+    "fg": "#cdd6f4",
+    "accent": "#a6e3a1",
+    "title-fg": "#cba6f7",
+    "border": "#45475a",
+    "muted": "#6c7086",
+    "radius": "6"
+  },
+  "global": {
+    "font_size": 14,
+    "fg_color": "$fg",
+    "bg_color": "$bg",
+    "accent_color": "$accent",
+    "border_color": "$border",
+    "border_radius": "$radius",
+    "border_width": 1,
+    "padding": [8, 14, 8, 14]
+  },
+  "widgets": {
+    "text": {
+      "fg_color": "$fg"
+    },
+    "text:title": {
+      "fg_color": "$title-fg",
+      "font_weight": 700
+    },
+    "list": {
+      "bg_color": "$bg"
+    },
+    "list item:selected": {
+      "bg_color": "$accent",
+      "fg_color": "$bg"
+    }
+  }
+}

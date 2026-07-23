@@ -1,0 +1,10 @@
+{
+  "name": "Large Print",
+  "variables": {
+    "font_size": 24
+  },
+  "global": {
+    "font_size": "$font_size"
+  },
+  "widgets": {}
+}

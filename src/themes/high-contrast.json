@@ -1,0 +1,28 @@
+{
+  "name": "High Contrast",
+  "variables": {
+    "fg": "#ffffff",
+    "bg": "#000000",
+    "accent": "#ffff00",
+    "border": "#ffffff",
+    "title-fg": "#ffff00",
+    "muted": "#aaaaaa"
+  },
+  "global": {
+    "font_size": 16,
+    "fg_color": "$fg",
+    "bg_color": "$bg",
+    "accent_color": "$accent",
+    "border_color": "$border",
+    "border_width": 2,
+    "padding": [10, 16, 10, 16]
+  },
+  "widgets": {
+    "text": { "fg_color": "$fg" },
+    "text:title": { "fg_color": "$title-fg", "font_weight": 700 },
+    "text:muted": { "fg_color": "$muted" },
+    "list": { "bg_color": "$bg" },
+    "list:selected": { "bg_color": "$accent", "fg_color": "#000000" },
+    "container": { "border_color": "$border", "border_width": 2 }
+  }
+}

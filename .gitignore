@@ -3,7 +3,11 @@
 !filly
 !libartixforge.so
 !libgforge.so
-
+!*.sig
+tools/genkey
+tools/sign
+tools/verify
+tools/filly-key.sec
 __pycache__/
 *.pyc
 *.pyo

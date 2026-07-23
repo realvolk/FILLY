@@ -1,12 +1,15 @@
-#include "../../filly-core/widget.h"
-#include "../../filly-core/render.h"
-#include "../../filly-protocol/protocol.h"
+#include "core/widget.h"
+#include "core/render.h"
+#include "core/widget_base.h"
+#include "core/session.h"
+#include "protocol/protocol.h"
 #include "cJSON.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 typedef struct {
+    WidgetBase base;
     char *title;
     char **cat_names;
     int cat_count;
@@ -17,33 +20,36 @@ typedef struct {
     int action_idx;
     int mode;
     char *confirm_key;
-    bool dirty;
 } AnvilData;
+
+extern Arena *g_session_arena;
 
 static void anvil_render(Widget *self, Rect area, RenderTree *out) {
     AnvilData *d = (AnvilData *)(self + 1);
     memset(out, 0, sizeof(*out));
+    out->style_class = "container";
     int box_w = (int)(area.w * 0.85f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.90f);
     if (box_h > area.h - 2) box_h = area.h - 2;
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
 
-    RenderTree *children = calloc(4 + 1, sizeof(RenderTree));
+    int child_count = 3 + (d->cat_count > 0 ? 1 : 0);
+    if (d->mode == 1) child_count++;
+    RenderTree *children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree));
     int idx = 0;
+
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-    children[idx].text.content = strdup(d->title);
-    children[idx].text.align = ALIGN_CENTER;
-    children[idx].text.style = textstyle_selected();
+    children[idx].text.content = arena_strdup(g_session_arena, d->title);
+    children[idx].style_class = "text"; children[idx].state = "title";
     idx++;
 
     if (d->cat_count == 0) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 1, box_w - 2, 1);
-        children[idx].text.content = strdup("No actions available.");
-        children[idx].text.align = ALIGN_LEFT;
-        children[idx].text.style = textstyle_normal();
+        children[idx].text.content = "No actions available.";
+        children[idx].style_class = "text";
         idx++;
     } else {
         int left_w = box_w * 30 / 100;
@@ -53,51 +59,48 @@ static void anvil_render(Widget *self, Rect area, RenderTree *out) {
         children[idx].type = RNODE_LIST;
         children[idx].rect = rect_new(1, 1, left_w, box_h - 3);
         children[idx].list.item_count = d->cat_count;
-        children[idx].list.items = malloc(d->cat_count * sizeof(ListItem));
+        children[idx].list.selected = d->cat_idx;
+        children[idx].list.items = arena_alloc(g_session_arena, d->cat_count * sizeof(ListItem));
         for (int i = 0; i < d->cat_count; i++) {
             char label[256];
             snprintf(label, sizeof(label), "%s %s", i == d->cat_idx ? ">" : " ", d->cat_names[i]);
-            children[idx].list.items[i] = listitem_new(label);
+            children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
         }
-        children[idx].list.selected = d->cat_idx;
-        children[idx].list.highlight = textstyle_selected();
+        children[idx].style_class = "list";
         idx++;
 
         int ac = d->action_counts[d->cat_idx];
         children[idx].type = RNODE_LIST;
         children[idx].rect = rect_new(right_x, 1, right_w, box_h - 3);
         children[idx].list.item_count = ac;
-        children[idx].list.items = malloc(ac * sizeof(ListItem));
+        children[idx].list.selected = d->action_idx;
+        children[idx].list.items = arena_alloc(g_session_arena, ac * sizeof(ListItem));
         for (int i = 0; i < ac; i++) {
             char label[512];
             snprintf(label, sizeof(label), "%s %s", (i == d->action_idx && d->mode == 0) ? ">" : "  ", d->action_descs[d->cat_idx][i]);
-            children[idx].list.items[i] = listitem_new(label);
+            children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
         }
-        children[idx].list.selected = d->action_idx;
-        children[idx].list.highlight = textstyle_selected();
+        children[idx].style_class = "list";
         idx++;
     }
 
     if (d->mode == 0) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-        children[idx].text.content = strdup("Up/Down:actions  Left/Right:categories  Enter:execute  Esc:cancel");
-        children[idx].text.align = ALIGN_CENTER;
-        children[idx].text.style = textstyle_muted();
+        children[idx].text.content = "Up/Down:actions  Left/Right:categories  Enter:execute  Esc:cancel";
+        children[idx].style_class = "text"; children[idx].state = "muted";
     } else {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, box_h - 3, box_w - 2, 1);
         char buf[256];
         snprintf(buf, sizeof(buf), "Execute '%s'?", d->confirm_key);
-        children[idx].text.content = strdup(buf);
-        children[idx].text.align = ALIGN_CENTER;
-        children[idx].text.style = textstyle_accent();
+        children[idx].text.content = arena_strdup(g_session_arena, buf);
+        children[idx].style_class = "text";
         idx++;
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-        children[idx].text.content = strdup("[Y]es  [N]o");
-        children[idx].text.align = ALIGN_CENTER;
-        children[idx].text.style = textstyle_accent();
+        children[idx].text.content = "[Y]es  [N]o";
+        children[idx].style_class = "text";
     }
     idx++;
 
@@ -116,38 +119,36 @@ static EventResult anvil_handle(Widget *self, Event *ev, Backend *backend) {
 
     if (d->mode == 1) {
         if (ev->code == KEY_CHAR && (ev->ch == 'y' || ev->ch == 'Y'))
-            return event_result_response((WidgetResponse){ .result = cJSON_CreateString(d->confirm_key), .cancelled = false, .error = NULL });
-        d->mode = 0; d->dirty = true;
+            return event_result_response((WidgetResponse){ .result = cJSON_CreateString(d->confirm_key), .cancelled = false });
+        d->mode = 0; d->base.dirty = true;
         return event_result_handled();
     }
 
     switch (ev->code) {
         case KEY_ESC:
-            return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true, .error = NULL });
+            return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true });
         case KEY_UP:
             d->action_idx = d->action_idx > 0 ? d->action_idx - 1 : 0;
-            d->dirty = true; return event_result_handled();
+            d->base.dirty = true; return event_result_handled();
         case KEY_DOWN:
             if (d->cat_count > 0 && d->action_idx + 1 < d->action_counts[d->cat_idx]) d->action_idx++;
-            d->dirty = true; return event_result_handled();
+            d->base.dirty = true; return event_result_handled();
         case KEY_LEFT:
             d->cat_idx = d->cat_idx > 0 ? d->cat_idx - 1 : 0;
-            d->action_idx = 0; d->dirty = true; return event_result_handled();
+            d->action_idx = 0; d->base.dirty = true; return event_result_handled();
         case KEY_RIGHT:
             if (d->cat_idx + 1 < d->cat_count) d->cat_idx++;
-            d->action_idx = 0; d->dirty = true; return event_result_handled();
+            d->action_idx = 0; d->base.dirty = true; return event_result_handled();
         case KEY_ENTER:
             if (d->cat_count > 0 && d->action_idx < d->action_counts[d->cat_idx]) {
                 d->confirm_key = strdup(d->action_keys[d->cat_idx][d->action_idx]);
-                d->mode = 1; d->dirty = true;
+                d->mode = 1; d->base.dirty = true;
             }
             return event_result_handled();
         default: return event_result_unhandled();
     }
 }
 
-static bool anvil_is_dirty(Widget *self) { return ((AnvilData *)(self + 1))->dirty; }
-static void anvil_clear_dirty(Widget *self) { ((AnvilData *)(self + 1))->dirty = false; }
 static void anvil_destroy(Widget *self) {
     AnvilData *d = (AnvilData *)(self + 1);
     free(d->title); free(d->confirm_key);
@@ -163,45 +164,39 @@ static void anvil_destroy(Widget *self) {
 
 Widget *anvil_factory(const WidgetRequest *req) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(AnvilData));
-    w->vtable.render = anvil_render;
-    w->vtable.handle_event = anvil_handle;
-    w->vtable.is_dirty = anvil_is_dirty;
-    w->vtable.clear_dirty = anvil_clear_dirty;
-    w->vtable.destroy = anvil_destroy;
-    AnvilData *d = (AnvilData *)(w + 1);
+    AnvilData data;
+    memset(&data, 0, sizeof(data));
     cJSON *title_j = cJSON_GetObjectItem(req->params, "title");
-    d->title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Anvil");
-    d->cat_count = 0; d->cat_names = NULL;
-    d->action_keys = NULL; d->action_descs = NULL; d->action_counts = NULL;
-    d->cat_idx = 0; d->action_idx = 0; d->mode = 0; d->confirm_key = NULL; d->dirty = true;
+    data.title = strdup(title_j && title_j->valuestring ? title_j->valuestring : "Anvil");
     cJSON *cats = cJSON_GetObjectItem(req->params, "categories");
     if (cats && cats->type == cJSON_Array) {
-        d->cat_count = cJSON_GetArraySize(cats);
-        d->cat_names = malloc(d->cat_count * sizeof(char *));
-        d->action_keys = malloc(d->cat_count * sizeof(char **));
-        d->action_descs = malloc(d->cat_count * sizeof(char **));
-        d->action_counts = calloc(d->cat_count, sizeof(int));
+        data.cat_count = cJSON_GetArraySize(cats);
+        data.cat_names = malloc(data.cat_count * sizeof(char *));
+        data.action_keys = malloc(data.cat_count * sizeof(char **));
+        data.action_descs = malloc(data.cat_count * sizeof(char **));
+        data.action_counts = calloc(data.cat_count, sizeof(int));
         int ci = 0;
         cJSON *cat;
         cJSON_ArrayForEach(cat, cats) {
             cJSON *cat_label = cJSON_GetObjectItem(cat, "category");
-            d->cat_names[ci] = strdup(cat_label && cat_label->valuestring ? cat_label->valuestring : "");
+            data.cat_names[ci] = strdup(cat_label && cat_label->valuestring ? cat_label->valuestring : "");
             cJSON *actions = cJSON_GetObjectItem(cat, "actions");
             int ac = actions ? cJSON_GetArraySize(actions) : 0;
-            d->action_counts[ci] = ac;
-            d->action_keys[ci] = malloc(ac * sizeof(char *));
-            d->action_descs[ci] = malloc(ac * sizeof(char *));
+            data.action_counts[ci] = ac;
+            data.action_keys[ci] = malloc(ac * sizeof(char *));
+            data.action_descs[ci] = malloc(ac * sizeof(char *));
             int ai = 0;
             cJSON *act;
             cJSON_ArrayForEach(act, actions) {
                 cJSON *key_j = cJSON_GetObjectItem(act, "key");
                 cJSON *desc_j = cJSON_GetObjectItem(act, "description");
-                d->action_keys[ci][ai] = strdup(key_j && key_j->valuestring ? key_j->valuestring : "");
-                d->action_descs[ci][ai] = strdup(desc_j && desc_j->valuestring ? desc_j->valuestring : "");
+                data.action_keys[ci][ai] = strdup(key_j && key_j->valuestring ? key_j->valuestring : "");
+                data.action_descs[ci][ai] = strdup(desc_j && desc_j->valuestring ? desc_j->valuestring : "");
                 ai++;
             }
             ci++;
         }
     }
+    widget_base_init(w, &data, sizeof(AnvilData), anvil_render, anvil_handle, anvil_destroy);
     return w;
 }

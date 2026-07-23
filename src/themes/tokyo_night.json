@@ -1,0 +1,38 @@
+{
+  "name": "Tokyo Night",
+  "variables": {
+    "bg": "#1a1b26",
+    "fg": "#c0caf5",
+    "accent": "#9ece6a",
+    "title-fg": "#7aa2f7",
+    "border": "#3b4261",
+    "muted": "#565f89",
+    "radius": "6"
+  },
+  "global": {
+    "font_size": 14,
+    "fg_color": "$fg",
+    "bg_color": "$bg",
+    "accent_color": "$accent",
+    "border_color": "$border",
+    "border_radius": "$radius",
+    "border_width": 1,
+    "padding": [8, 14, 8, 14]
+  },
+  "widgets": {
+    "text": {
+      "fg_color": "$fg"
+    },
+    "text:title": {
+      "fg_color": "$title-fg",
+      "font_weight": 700
+    },
+    "list": {
+      "bg_color": "$bg"
+    },
+    "list item:selected": {
+      "bg_color": "$accent",
+      "fg_color": "$bg"
+    }
+  }
+}

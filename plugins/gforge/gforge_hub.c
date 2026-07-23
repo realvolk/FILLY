@@ -1,6 +1,6 @@
-#include "../../filly-core/widget.h"
-#include "../../filly-core/widgets/hub.h"
-#include "../../filly-protocol/protocol.h"
+#include "core/widget.h"
+#include "core/widgets/hub.h"
+#include "protocol/protocol.h"
 #include "cJSON.h"
 
 Widget *gforge_hub_factory(const WidgetRequest *req) {

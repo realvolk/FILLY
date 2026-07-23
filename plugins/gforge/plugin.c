@@ -1,4 +1,4 @@
-#include "../../filly-core/widget.h"
+#include "core/widget.h"
 
 extern Widget *gforge_hub_factory(const WidgetRequest *req);
 extern Widget *stage3_factory(const WidgetRequest *req);

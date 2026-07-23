@@ -1,4 +1,4 @@
-#include "../../filly-core/widget.h"
+#include "core/widget.h"
 
 extern Widget *install_hub_factory(const WidgetRequest *req);
 extern Widget *anvil_factory(const WidgetRequest *req);
