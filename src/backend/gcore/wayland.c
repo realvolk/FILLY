@@ -1,5 +1,4 @@
-#include "xdg-shell-client-protocol.h"
-#include "xdg-decoration-client-protocol.h"
+#include "xdg-shell.h"
 #include "backend.h"
 #include <xkbcommon/xkbcommon.h>
 #include <sys/mman.h>

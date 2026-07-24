@@ -75,7 +75,7 @@ SRCS = src/cli/main.c \
        src/core/widgets/tooltip.c \
        src/core/widgets/hub.c
 
-GCORE_SRCS = src/xdg-shell-protocol.c src/xdg-decoration-protocol.c
+GCORE_SRCS = src/xdg-shell.c
 
 PLUGIN_ARTIXFORGE_SRCS = plugins/artixforge/plugin.c \
                           plugins/artixforge/install_hub.c \
