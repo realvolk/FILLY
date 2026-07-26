@@ -1,13 +1,29 @@
 #include "input.h"
 #include "core/widget_base.h"
 #include "core/session.h"
+#include "core/store.h"
+#include "script/fil.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <regex.h>
 
-typedef struct { WidgetBase base; char *title, *message, *text; int cursor; char *placeholder; regex_t *validation; } InputData;
+typedef struct {
+    WidgetBase base;
+    char *title, *message, *text;
+    int cursor;
+    char *placeholder;
+    regex_t *validation;
+    char *validation_script;
+} InputData;
+
 extern Arena *g_session_arena;
+extern Store *g_active_store;
+
+static const char *input_store_get(const char *key) {
+    if (!g_active_store) return NULL;
+    return store_get(g_active_store, key);
+}
 
 static void input_render(Widget *self, Rect area, RenderTree *out) {
     InputData *d = (InputData *)(self + 1);
@@ -52,6 +68,14 @@ static EventResult input_handle_event(Widget *self, Event *ev, Backend *backend)
         case KEY_ESC: return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true });
         case KEY_ENTER:
             if (d->validation && regexec(d->validation, d->text, 0, NULL, 0) != 0) return event_result_handled();
+            if (d->validation_script) {
+                FilResult *fr = fil_eval(d->validation_script, input_store_get, d->text);
+                if (!fr->accepted) {
+                    fil_result_free(fr);
+                    return event_result_handled();
+                }
+                fil_result_free(fr);
+            }
             return event_result_response((WidgetResponse){ .result = cJSON_CreateString(d->text), .cancelled = false });
         case KEY_CHAR: {
             int len = strlen(d->text);
@@ -83,10 +107,12 @@ static EventResult input_handle_event(Widget *self, Event *ev, Backend *backend)
 static void input_destroy(Widget *self) {
     InputData *d = (InputData *)(self + 1);
     free(d->title); free(d->message); free(d->text); free(d->placeholder);
+    free(d->validation_script);
     if (d->validation) { regfree(d->validation); free(d->validation); }
 }
 
-Widget *input_widget_new(const char *title, const char *message, const char *default_text, const char *placeholder, const char *validation) {
+Widget *input_widget_new(const char *title, const char *message, const char *default_text,
+                          const char *placeholder, const char *validation) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(InputData));
     InputData *d = (InputData *)(w + 1);
     d->base.dirty = true;
@@ -96,6 +122,7 @@ Widget *input_widget_new(const char *title, const char *message, const char *def
     d->text = default_text ? strdup(default_text) : strdup("");
     d->cursor = default_text ? strlen(default_text) : 0;
     d->placeholder = placeholder ? strdup(placeholder) : strdup("");
+    d->validation_script = NULL;
     if (validation) {
         d->validation = malloc(sizeof(regex_t));
         if (regcomp(d->validation, validation, REG_EXTENDED | REG_NOSUB) != 0) { free(d->validation); d->validation = NULL; }
@@ -106,4 +133,11 @@ Widget *input_widget_new(const char *title, const char *message, const char *def
     w->vtable.clear_dirty = widget_base_clear_dirty;
     w->vtable.destroy = input_destroy;
     return w;
+}
+
+void input_widget_set_validation_script(Widget *w, const char *script) {
+    if (!w) return;
+    InputData *d = (InputData *)(w + 1);
+    free(d->validation_script);
+    d->validation_script = script ? strdup(script) : NULL;
 }

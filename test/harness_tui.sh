@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Euo pipefail
-FILLY="../filly"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FILLY="${SCRIPT_DIR}/../filly"
 PASS=0; FAIL=0; SKIP=0
 TOTAL=0
 TEST_DIR="/tmp/filly-tui-tests"
@@ -68,16 +69,19 @@ DAEMON_PID=$!
 sleep 2
 if kill -0 ${DAEMON_PID} 2>/dev/null; then
     printf "${GREEN}[PASS]${NC} daemon starts\n"; PASS=$((PASS+1)); TOTAL=$((TOTAL+1))
-    resp=$(timeout 3 "${FILLY}" send --socket /tmp/filly-tui-daemon.sock '{"widget":"msg","params":{"title":"D","message":"daemon works"}}' 2>/dev/null || true)
+    sleep 1
+    resp=$(timeout 3 "${FILLY}" send --socket /tmp/filly-tui-daemon.sock --json '{"widget":"msg","params":{"title":"D","message":"daemon works"}}' 2>&1 || true)
     if echo "${resp}" | grep -qF '"cancelled":false'; then
         printf "${GREEN}[PASS]${NC} daemon processes request\n"; PASS=$((PASS+1)); TOTAL=$((TOTAL+1))
     else
         printf "${RED}[FAIL]${NC} daemon processes request (timeout or error)\n"; FAIL=$((FAIL+1)); TOTAL=$((TOTAL+1))
+        echo "DEBUG: ${resp}"
     fi
     timeout 2 "${FILLY}" send --socket /tmp/filly-tui-daemon.sock --quit 2>/dev/null || true
     sleep 1
     if kill -0 ${DAEMON_PID} 2>/dev/null; then
-        kill -9 ${DAEMON_PID} 2>/dev/null
+        kill -9 ${DAEMON_PID} 2>/dev/null || true
+        wait ${DAEMON_PID} 2>/dev/null || true
         printf "${RED}[FAIL]${NC} daemon quits (forced kill)\n"; FAIL=$((FAIL+1)); TOTAL=$((TOTAL+1))
     else
         printf "${GREEN}[PASS]${NC} daemon quits\n"; PASS=$((PASS+1)); TOTAL=$((TOTAL+1))
@@ -85,11 +89,10 @@ if kill -0 ${DAEMON_PID} 2>/dev/null; then
 else
     printf "${RED}[FAIL]${NC} daemon starts\n"; FAIL=$((FAIL+1)); TOTAL=$((TOTAL+1))
 fi
-kill ${DAEMON_PID} 2>/dev/null; wait ${DAEMON_PID} 2>/dev/null
 rm -f /tmp/filly-tui-daemon.sock
 
 printf "${YELLOW}--- filly send / filly build CLI ---${NC}\n"
-resp=$("${FILLY}" build menu --title "CLITest" --choice A --choice B 2>/dev/null || true)
+resp=$("${FILLY}" build menu --title "CLITest" --choice A --choice B 2>&1 || true)
 if echo "${resp}" | grep -qF '"widget":"menu"'; then
     printf "${GREEN}[PASS]${NC} filly build produces JSON\n"; PASS=$((PASS+1)); TOTAL=$((TOTAL+1))
 else

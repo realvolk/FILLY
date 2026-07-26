@@ -7,9 +7,11 @@
 #include <string.h>
 
 int main(void) {
-    gcore_init_font(NULL, 14);
     bool ok = gcore_init_font(NULL, 14);
-    printf("font loaded: %d\n", ok);
+    if (!ok) {
+        fprintf(stderr, "Font init failed\n");
+        return 1;
+    }
     Arena *arena = arena_new(1024 * 1024);
     Theme *theme = theme_default();
 
@@ -31,6 +33,11 @@ int main(void) {
 
     children[1].type = RNODE_LIST;
     children[1].rect = rect_new(50, 80, 540, 300);
+    children[1].resolved_style = widgetstyle_default();
+    children[1].resolved_style.font_size = 14;
+    children[1].resolved_style.fg_color = gcore_rgba(208, 208, 208, 255);
+    children[1].resolved_style.bg_color = gcore_rgba(26, 26, 46, 255);
+    children[1].resolved_style.accent_color = gcore_rgba(233, 69, 96, 255);
     children[1].list.item_count = 5;
     children[1].list.items = malloc(5 * sizeof(ListItem));
     children[1].list.items[0] = listitem_new("Option Alpha");
@@ -39,18 +46,22 @@ int main(void) {
     children[1].list.items[3] = listitem_new("Option Delta");
     children[1].list.items[4] = listitem_new("Option Epsilon");
     children[1].list.selected = 2;
-    children[1].resolved_style = widgetstyle_default();
 
     tree.container.children = children;
     tree.container.child_count = 2;
 
     PixelBuffer pb;
     pb.width = 640; pb.height = 480; pb.stride = 640;
+    pb.mouse_x = 0; pb.mouse_y = 0;
     pb.pixels = calloc(pb.width * pb.height, sizeof(uint32_t));
 
     gcore_render_tree_to_pixels(&tree, &pb, theme, arena);
 
     FILE *f = fopen("pixel_test.ppm", "wb");
+    if (!f) {
+        fprintf(stderr, "Cannot open output file\n");
+        return 1;
+    }
     fprintf(f, "P6\n%d %d\n255\n", pb.width, pb.height);
     for (int i = 0; i < pb.width * pb.height; i++) {
         uint32_t p = pb.pixels[i];
@@ -66,7 +77,6 @@ int main(void) {
 
     free(pb.pixels);
     free(children[0].text.content);
-    for (int i = 0; i < 5; i++) free(children[1].list.items[i].label);
     free(children[1].list.items);
     free(children);
     arena_free(arena);

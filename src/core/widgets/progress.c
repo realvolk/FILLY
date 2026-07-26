@@ -9,7 +9,16 @@
 #include <signal.h>
 #include <limits.h>
 
-typedef struct { WidgetBase base; char *title, **command, *output, *stage, *logfile; int cmd_count, progress, pipe_fd[2]; pid_t child_pid; bool show_raw; } ProgressData;
+typedef struct {
+    WidgetBase base;
+    char *title, **command, *output, *stage, *logfile;
+    int cmd_count, progress, pipe_fd[2];
+    pid_t child_pid;
+    bool show_raw;
+    int yield_fd;
+    int last_yielded_progress;
+} ProgressData;
+
 extern Arena *g_session_arena;
 
 static bool progress_command_allowed(char **cmd, int count) {
@@ -24,9 +33,23 @@ static bool progress_command_allowed(char **cmd, int count) {
     return false;
 }
 
+static void progress_send_yield(ProgressData *d) {
+    if (d->yield_fd < 0) return;
+    if (d->progress == d->last_yielded_progress && d->progress != 100) return;
+    d->last_yielded_progress = d->progress;
+    char buf[256];
+    int n = snprintf(buf, sizeof(buf),
+        "{\"type\":\"yield\",\"progress\":%d,\"stage\":\"%s\"}\n",
+        d->progress, d->stage ? d->stage : "");
+    write(d->yield_fd, buf, n);
+}
+
 static void progress_start(ProgressData *d) {
     if (!progress_command_allowed(d->command, d->cmd_count)) {
         d->output = strdup("Command not allowed\n");
+        d->progress = 100;
+        d->stage = "Error";
+        progress_send_yield(d);
         return;
     }
     if (pipe(d->pipe_fd) < 0) return;
@@ -62,6 +85,7 @@ static void progress_update(ProgressData *d) {
         else if (strstr(buf, "Bootloader")) { d->progress = 78; d->stage = "Bootloader configured"; }
         else if (strstr(buf, "Post-install")) { d->progress = 90; d->stage = "Post-install done"; }
         else if (strstr(buf, "Final")) { d->progress = 100; d->stage = "Finalizing"; }
+        progress_send_yield(d);
     }
     int status;
     if (waitpid(d->child_pid, &status, WNOHANG) > 0) {
@@ -69,6 +93,7 @@ static void progress_update(ProgressData *d) {
         d->stage = "Complete";
         close(d->pipe_fd[0]);
         d->child_pid = 0;
+        progress_send_yield(d);
     }
 }
 
@@ -130,6 +155,9 @@ static EventResult progress_handle_event(Widget *self, Event *ev, Backend *backe
     switch (ev->code) {
         case KEY_ESC:
             if (d->child_pid > 0) { kill(d->child_pid, SIGTERM); d->child_pid = 0; }
+            d->progress = 100;
+            d->stage = "Cancelled";
+            progress_send_yield(d);
             return event_result_response((WidgetResponse){ .result = NULL, .cancelled = true });
         case KEY_TAB:
             d->show_raw = !d->show_raw;
@@ -163,10 +191,18 @@ Widget *progress_widget_new(const char *title, char **command, int cmd_count, co
         .stage = "Starting...",
         .show_raw = false,
         .child_pid = 0,
-        .logfile = logfile ? strdup(logfile) : NULL
+        .logfile = logfile ? strdup(logfile) : NULL,
+        .yield_fd = -1,
+        .last_yielded_progress = -1
     };
     data.command = malloc(cmd_count * sizeof(char *));
     for (int i = 0; i < cmd_count; i++) data.command[i] = strdup(command[i]);
     widget_base_init(w, &data, sizeof(ProgressData), progress_render, progress_handle_event, progress_destroy);
     return w;
+}
+
+void progress_widget_set_yield_fd(Widget *w, int fd) {
+    if (!w) return;
+    ProgressData *d = (ProgressData *)(w + 1);
+    d->yield_fd = fd;
 }

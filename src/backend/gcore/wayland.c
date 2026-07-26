@@ -112,11 +112,9 @@ static void wl_xdg_toplevel_configure(void *data, struct xdg_toplevel *t, int32_
     wd->configured = true;
 }
 static void wl_xdg_toplevel_close(void *data, struct xdg_toplevel *t) { (void)t; ((WaylandData *)data)->running = false; }
-static void wl_xdg_toplevel_configure_bounds(void *d, struct xdg_toplevel *t, int32_t w, int32_t h) { (void)d; (void)t; (void)w; (void)h; }
-static void wl_xdg_toplevel_wm_capabilities(void *d, struct xdg_toplevel *t, struct wl_array *c) { (void)d; (void)t; (void)c; }
 static const struct xdg_toplevel_listener xdg_toplevel_listener = {
-    .configure = wl_xdg_toplevel_configure, .close = wl_xdg_toplevel_close,
-    .configure_bounds = wl_xdg_toplevel_configure_bounds, .wm_capabilities = wl_xdg_toplevel_wm_capabilities
+    .configure = wl_xdg_toplevel_configure,
+    .close = wl_xdg_toplevel_close,
 };
 
 static void wl_pointer_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf, wl_fixed_t sx, wl_fixed_t sy) {

@@ -18,3 +18,5 @@ ClipboardInterface *session_get_clipboard(void);
 UndoStack *session_get_undo(void);
 void session_load_keymap(const char *key, KeyCode code, char ch);
 void session_clear_keymap(void);
+struct FilResult;
+void session_load_keymap_from_fil(struct FilResult *fr);

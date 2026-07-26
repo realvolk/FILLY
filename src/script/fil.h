@@ -13,6 +13,9 @@ typedef struct FilResult {
     int style_count;
     char **keymap_bindings;
     int keymap_count;
+    char **animation_names;
+    char **animation_targets;
+    int animation_count;
 } FilResult;
 
 FilResult *fil_eval(const char *script, const char *(*store_get)(const char *key), const char *current_value);

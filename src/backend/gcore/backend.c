@@ -32,6 +32,9 @@ extern void teardown_wayland(GCoreBackend *g);
 extern void wayland_flush_draw(GCoreBackend *g);
 extern Event wayland_next_event(GCoreBackend *g);
 
+static RenderTree *hit_test(RenderTree *node, int px, int py, int off_x, int off_y, int *abs_x, int *abs_y);
+static void synthesize_key_events(GCoreBackend *g, RenderTree *hit, int px, int py, int abs_x, int abs_y);
+
 typedef struct {
     int fd;
     drmModeConnector *connector;
@@ -78,7 +81,6 @@ static uint32_t lerp_color(uint32_t c1, uint32_t c2, float t) {
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
-/* window icon data: 32x32 ARGB */
 static const unsigned long icon_data[] = {
     32, 32,
     0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,0xFF1a1a2e,
@@ -300,6 +302,15 @@ static Event dequeue_event(GCoreBackend *g) {
     return ev;
 }
 
+static void process_touch_event(GCoreBackend *g, struct libinput_event_touch *tev) {
+    double x = libinput_event_touch_get_x(tev);
+    double y = libinput_event_touch_get_y(tev);
+    g->mouse_x = (int)x; g->mouse_y = (int)y;
+    int abs_x = 0, abs_y = 0;
+    RenderTree *hit = hit_test(g->render_tree, g->mouse_x, g->mouse_y, 0, 0, &abs_x, &abs_y);
+    synthesize_key_events(g, hit, g->mouse_x, g->mouse_y, abs_x, abs_y);
+}
+
 bool gcore_backend_init(GCoreBackend *g, GCoreOutput output, const char *display_name) {
     memset(g, 0, sizeof(*g));
     g->display_name = display_name ? strdup(display_name) : NULL;
@@ -313,6 +324,10 @@ bool gcore_backend_init(GCoreBackend *g, GCoreOutput output, const char *display
     g->queue_head = 0;
     g->queue_tail = 0;
     g->wl_clipboard = NULL;
+    g->mouse_button = 0;
+    g->dragging = false;
+    g->drag_start_x = 0;
+    g->drag_start_y = 0;
     gcore_init_font(NULL, 14);
     if (getenv("WAYLAND_DISPLAY")) { if (setup_wayland(g) == 0) { g->output = GCORE_WAYLAND; return true; } }
     if (getenv("DISPLAY")) { if (setup_x11(g) == 0) { g->output = GCORE_X11; return true; } }
@@ -406,6 +421,16 @@ bool gcore_backend_draw(void *self, RenderTree *tree) {
         ws->opacity = tree->prev_resolved_style.opacity + (ws->opacity - tree->prev_resolved_style.opacity) * t;
         ws->border_radius = (int)(tree->prev_resolved_style.border_radius + (ws->border_radius - tree->prev_resolved_style.border_radius) * t);
         ws->font_size = (int)(tree->prev_resolved_style.font_size + (ws->font_size - tree->prev_resolved_style.font_size) * t);
+        ws->shadow_offset_x = (int)(tree->prev_resolved_style.shadow_offset_x + (ws->shadow_offset_x - tree->prev_resolved_style.shadow_offset_x) * t);
+        ws->shadow_offset_y = (int)(tree->prev_resolved_style.shadow_offset_y + (ws->shadow_offset_y - tree->prev_resolved_style.shadow_offset_y) * t);
+        ws->shadow_blur = (int)(tree->prev_resolved_style.shadow_blur + (ws->shadow_blur - tree->prev_resolved_style.shadow_blur) * t);
+        ws->shadow_color = lerp_color(tree->prev_resolved_style.shadow_color, ws->shadow_color, t);
+        ws->bg_gradient_to = lerp_color(tree->prev_resolved_style.bg_gradient_to, ws->bg_gradient_to, t);
+        ws->scale_x = tree->prev_resolved_style.scale_x + (ws->scale_x - tree->prev_resolved_style.scale_x) * t;
+        ws->scale_y = tree->prev_resolved_style.scale_y + (ws->scale_y - tree->prev_resolved_style.scale_y) * t;
+        ws->rotation = tree->prev_resolved_style.rotation + (ws->rotation - tree->prev_resolved_style.rotation) * t;
+        ws->translate_x = tree->prev_resolved_style.translate_x + (ws->translate_x - tree->prev_resolved_style.translate_x) * t;
+        ws->translate_y = tree->prev_resolved_style.translate_y + (ws->translate_y - tree->prev_resolved_style.translate_y) * t;
     }
 
     gcore_render_tree_to_pixels(tree, &g->pb, g->theme, g->arena);
@@ -523,17 +548,58 @@ Event gcore_backend_next_event(void *self) {
             if (g->mouse_y < 0) g->mouse_y = 0;
             if (g->mouse_x >= g->pb.width) g->mouse_x = g->pb.width - 1;
             if (g->mouse_y >= g->pb.height) g->mouse_y = g->pb.height - 1;
+            if (g->mouse_button && !g->dragging) {
+                int dx = g->mouse_x - g->drag_start_x;
+                int dy = g->mouse_y - g->drag_start_y;
+                if (abs(dx) > 5 || abs(dy) > 5) {
+                    g->dragging = true;
+                    Event dev = { .type = EVENT_MOUSE_DRAG_START, .x = g->mouse_x, .y = g->mouse_y,
+                                  .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                                  .drag_start_y = g->drag_start_y, .drag_dx = dx, .drag_dy = dy };
+                    libinput_event_destroy(event);
+                    return dev;
+                }
+            }
+            if (g->dragging) {
+                Event dev = { .type = EVENT_MOUSE_DRAG_MOVE, .x = g->mouse_x, .y = g->mouse_y,
+                              .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                              .drag_start_y = g->drag_start_y,
+                              .drag_dx = g->mouse_x - g->drag_start_x,
+                              .drag_dy = g->mouse_y - g->drag_start_y };
+                libinput_event_destroy(event);
+                return dev;
+            }
             ev.type = EVENT_MOUSE_MOTION; ev.x = g->mouse_x; ev.y = g->mouse_y; ev.mouse_state = MOUSE_MOTION;
             break;
         }
         case LIBINPUT_EVENT_POINTER_BUTTON: {
             struct libinput_event_pointer *p = libinput_event_get_pointer_event(event);
             uint32_t state = libinput_event_pointer_get_button_state(p);
+            uint32_t button = libinput_event_pointer_get_button(p);
             if (state == LIBINPUT_BUTTON_STATE_PRESSED) {
+                g->mouse_button = button;
+                g->drag_start_x = g->mouse_x;
+                g->drag_start_y = g->mouse_y;
+                g->dragging = false;
                 int abs_x = 0, abs_y = 0;
                 RenderTree *hit = hit_test(g->render_tree, g->mouse_x, g->mouse_y, 0, 0, &abs_x, &abs_y);
                 synthesize_key_events(g, hit, g->mouse_x, g->mouse_y, abs_x, abs_y);
                 return dequeue_event(g);
+            } else {
+                if (g->dragging) {
+                    Event dev = { .type = EVENT_MOUSE_DRAG_END, .x = g->mouse_x, .y = g->mouse_y,
+                                  .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                                  .drag_start_y = g->drag_start_y,
+                                  .drag_dx = g->mouse_x - g->drag_start_x,
+                                  .drag_dy = g->mouse_y - g->drag_start_y };
+                    g->dragging = false;
+                    g->mouse_button = 0;
+                    return dev;
+                }
+                g->mouse_button = 0;
+                g->dragging = false;
+                ev.type = EVENT_MOUSE_BUTTON; ev.x = g->mouse_x; ev.y = g->mouse_y;
+                ev.button = button; ev.mouse_state = MOUSE_RELEASE;
             }
             break;
         }
@@ -541,6 +607,12 @@ Event gcore_backend_next_event(void *self) {
             struct libinput_event_pointer *p = libinput_event_get_pointer_event(event);
             ev.type = EVENT_MOUSE_SCROLL; ev.x = g->mouse_x; ev.y = g->mouse_y;
             ev.mouse_state = libinput_event_pointer_get_scroll_value(p, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) < 0 ? MOUSE_SCROLL_UP : MOUSE_SCROLL_DOWN;
+            break;
+        }
+        case LIBINPUT_EVENT_TOUCH_DOWN:
+        case LIBINPUT_EVENT_TOUCH_MOTION: {
+            struct libinput_event_touch *tev = libinput_event_get_touch_event(event);
+            process_touch_event(g, tev);
             break;
         }
         }
@@ -666,5 +738,8 @@ void gcore_backend_get_size(void *self, int *w, int *h) { GCoreBackend *g = (GCo
 BackendVTable gcore_vtable = {
     .setup = gcore_backend_setup, .draw = gcore_backend_draw, .next_event = gcore_backend_next_event,
     .teardown = gcore_backend_teardown, .get_size = gcore_backend_get_size,
-    .wait_frame = gcore_backend_wait_frame, .is_interactive = true,
+    .wait_frame = gcore_backend_wait_frame,
+    .copy_to_clipboard = NULL,
+    .paste_from_clipboard = NULL,
+    .is_interactive = true,
 };

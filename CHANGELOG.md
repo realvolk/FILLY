@@ -1,5 +1,101 @@
 # Changelog
 
+## v0.5.0 (2026-07-26) — FILLY
+
+### Added
+- **MessagePack wire format** — fully activated via handshake negotiation; daemon responds in MessagePack when client requests it
+- **Device profile detection** — daemon detects SSH, local TTY, Wayland, X11, or headless environment and adapts theme defaults (high-contrast on SSH)
+- **Gamepad input** — libinput gamepad events mapped to keyboard: buttons to Enter/Esc/Tab/Space, analog sticks to arrow keys
+- **Touch input** — touch-to-click synthesis via RenderTree hit-testing
+- **Terminal emulator widget** — embeds a PTY with scrollback buffer (64KB), resize handling via TIOCSWINSZ, and `/` search filter
+- **Widget builder widget** — visual palette for composing widget layouts; F1/F2/F3 mode switching, arrow navigation, S to save as JSON
+- **Macro recorder widget** — UI for record/playback/save/load of session macros
+- **Macro recording subsystem** — `src/core/recorder.c` captures frames (widget, params, response, ANSI snapshot) and events to `.filly-rec` JSON; replay mode with response comparison
+- **Fault injection harness** — `test/fault_inject.c` tests corrupted JSON, truncated messages, unknown widgets, deeply nested JSON, arena exhaustion, null parameters, empty strings, massive choice lists
+- **Performance benchmarks** — `test/benchmark.c` measures frame time, arena peak, response status for standard workloads; outputs CSV
+- **Snapshot testing** — ANSI output mode in addition to pixel comparison; `--mode pixel|ansi` flag
+- **CI pipeline** — GitHub Actions workflows for valgrind, snapshot, lint (clang-tidy), cppcheck, benchmark, fault injection, FreeBSD, OpenBSD
+- **Language bindings** — Python (ctypes), Go (cgo), Node.js (napi) with `libfilly.so` shared library target
+- **FreeBSD capsicum support** — capability rights limiting on daemon startup
+- **OpenBSD pledge support** — `pledge("stdio unix proc")` after socket bind
+- **Style engine colour arithmetic** — `lighten(color)`, `darken(color)`, `alpha(color)`, `mix(color1, color2, amount)` functions in theme variable resolution
+- **Glyph cache** — 256-entry cache in pixel renderer avoids repeated glyph rasterization
+- **CJK font support** — Noto Sans CJK in font fallback chain
+- **FIL store bindings** — `input` widget passes active store to `fil_eval` for reactive validation against store state
+- **Damage-region tracking** — `dirty_rect` parameter in pixel renderer for incremental updates
+- **libfilly.so** — shared library target for language bindings
+- **clang-tidy and cppcheck** — Makefile targets `lint` and `cppcheck`; `.clang-tidy` config
+- **GUI builder** — `filly-build` standalone binary for visual widget composition:
+  - **Project data model** — `BuilderProject` with items, nodes, edges, keymaps, store variables, TUI config, undo stack; JSON serialization to `.filly-project` format
+  - **Canvas** — infinite zoom (0.1x-5.0x), pan, snap-to-grid, 8-point resize handles, rubber-band multi-select, right-click context menu (delete/lock/bring to front/send to back), live pixel preview via headless backend, tab order overlay, grid toggle
+  - **Palette** — populated dynamically from widget registry with category grouping; 33 built-in types plus extensions bucket for plugins
+  - **Connection graph editor** — node/port/edge visual diagram, wire drawing from output to input ports, port compatibility checking (TRIGGER→any, type matching), edge condition/transform editing, custom user-defined ports, store node creation
+  - **Property editor** — dynamic form generation from `widget_get_params()` ParamDesc arrays, keyboard field editing and navigation
+  - **Code generation** — FIL script generation from graph edges, complete C plugin source with layout builder, event handlers, factory, registration, and Makefile output
+  - **Validation pipeline** — 13 checks: duplicate IDs, overlap, bounds, keyboard access, tab order, colour contrast, FIL syntax, dangling edges, type mismatches, cycles, missing labels, unused store vars, orphan widgets
+  - **Builder shell** — five-pane layout using three-pane `split_panes` (palette, canvas, properties, connection graph, status), mode switching (Edit/Wire/Preview/TUI via F1-F4), keyboard shortcuts throughout
+  - **Headless export** — `--export` flag for CI integration
+- **Animation engine** — keyframe-based with full interpolation pipeline:
+  - **6 easing functions** — linear, ease-in, ease-out, ease-in-out, bounce, elastic
+  - **Animatable properties** — fg_color, bg_color, border_color, accent_color, border_width, border_radius, font_size, font_weight, opacity, shadow_offset, shadow_blur, shadow_color, bg_gradient_to, scale_x, scale_y, rotation, translate_x, translate_y
+  - **Keyframe system** — multi-keyframe `AnimationDef` with per-segment easing, loop/repeat/auto_reverse, on_complete triggers (store key + FIL script)
+  - **Animation registry** — global named animation definitions loaded from theme JSON `"animations"` section
+  - **Playback API** — `animation_play`, `animation_stop`, `animation_pause`, `animation_resume`, `animation_play_custom`
+  - **Per-frame update** — `animation_update(tree, now_ms)` called in session render loop before draw
+  - **TUI animation subset** — opacity dimming, border colour cycling, character-level typewriter reveal; transform properties ignored
+  - **GPU transform support** — scale, rotation, translation applied via model matrix in gcore backend
+  - **Widget ports** — `animation_end`(TRIGGER) output and `play_animation`(STRING) input on every widget type
+- **FIL animation statements** — `animate "widget_id" with "name"`, `stop animation on "widget_id"`, `pause animation on "widget_id"`, `resume animation on "widget_id"`; `FilResult.animation_names`/`animation_targets`/`animation_count` fields
+- **Three-pane split_panes** — `split_position2` and `third` RenderTree pointer in `split_panes` union for three-column layouts
+- **Widget public API extensions** — `widget_registry_enum`, `widget_registry_count`, `widget_get_params`, `ParamDesc`/`ParamType` public typedefs in `widget.h`
+- **RenderTree animation state** — `active_animations` array and `animation_count` field on every node
+- **WidgetStyle transform properties** — `scale_x`, `scale_y`, `rotation`, `translate_x`, `translate_y` with defaults in `widgetstyle_default()`
+
+### Changed
+- **cJSON replaced** — upgraded from minimal hand-rolled parser to full cJSON v1.7.19 with `cJSON_CreateStringArray` and correct null handling
+- **Widget factory system** — rewritten from broken `generic_factory` cast to per-widget factory functions with proper parameter extraction and array counting
+- **Daemon portability** — `#ifdef __linux__` blocks replaced with `FILLY_INOTIFY`/`FILLY_KQUEUE` guards; `struct ucred` replaced with `filly_ucred_t`
+- **Oneshot fallback** — when no terminal is available, oneshot mode falls back to headless backend and writes response to stdout
+- **Main.c refactored** — 33 individual factory wrappers with `count_str_array` helper; duplicate `shm_ipc_create`/`shm_ipc_map` removed; `session_run_multi` suppressed; `parse_key_name` extended with HOME/END/PAGEUP/PAGEDOWN/DELETE/INSERT
+- **daemon.c** — `strncpy` replaced with `memcpy`+null; `i18n_init()` called; `checkpoint.c` buffer increased; `sandbox.c` unused params silenced; `widget_registry_register("text", ...)` alias added
+- **Theme engine** — `resolve_var` made public and extended with function parsing; `theme_apply_fil_styles` wired; `parse_color` made public; animation loading from theme JSON via `animation_registry_load_from_theme`
+- **Session** — `store_get_wrapper` added for FIL store access; `animation_update` called per frame before draw; `#include "core/animation.h"` added
+- **Gcore backend** — transition interpolation extended to all animatable properties (shadows, gradients, transforms); animation transform applied in `render_node`
+- **Gcore renderer** — scale/rotation/translation applied to `x, y, w, h` before widget rendering
+- **Terminal renderer** — TUI animation subset: opacity dimming at <0.3, muted colours at 0.3-0.7
+- **README** — updated feature count (36 widgets, 4 backends, animation engine, GUI builder), project structure with `src/builder/` and `src/core/animation.c`, architecture diagram
+- **Spec** — upgraded to v0.9.0 with animation engine, GUI builder, three-pane splits, and updated roadmap
+- **Makefile** — `src/core/animation.c` added to SRCS; `src/builder/` files in `filly-build` target; `-Isrc/builder` flag; `filly-build` added to clean target
+
+### Fixed
+- **Arena allocator** — `arena_alloc` now zeroes returned memory, preventing stale RenderTree data from causing segfaults
+- **Daemon double-read** — `handle_client` no longer discards the first message when no handshake is sent; widget requests work on first message
+- **cJSON_CreateNull** — type field properly set to `cJSON_NULL` instead of 0
+- **Generic factory type mismatch** — `WidgetFactory` signature mismatch causing undefined behavior; replaced with per-widget wrappers
+- **Menu/checklist/filter/radio/context menu** — count derived from array size instead of requiring separate `count` parameter
+- **Form field count** — derived from fields array
+- **Checklist min/max params** — renamed from `min_sel`/`max_sel` to `min`/`max` to match JSON keys
+- **Parse key name** — added HOME, END, PAGEUP, PAGEDOWN, DELETE, INSERT
+- **Text editor widget** — registered as both `"text_editor"` and `"text"` for backward compatibility
+- **xdg-shell.h** — forward declarations for opaque structs; removed `configure_bounds`/`wm_capabilities` listener fields
+- **Wayland listener** — removed v4+ fields for compatibility with older wayland-client
+- **daemon.c** — `#include "core/theme.h"` and `#include "filly-port/port.h"` added
+- **main.c** — `#include "core/i18n.h"` added
+- **Checkpoint truncation** — `tmpfile` buffer increased to 2560 bytes
+- **stb_truetype** — null-pointer guards on `xoff`/`yoff` output parameters in `stbtt_GetCodepointBitmap`; double `FindGlyphIndex` calls consolidated; `FlattenCurves` double-allocation bug fixed; null checks on malloc returns throughout rasterizer
+- **gcore renderer** — `update_hover_states` invalid `free()` on string literals fixed via `state_owned` flag on `RenderTree`
+- **Makefile** — `src/core/shm_ipc.c` added to SRCS; `-Isrc/filly-port` added to CFLAGS; `-lutil` added to LDFLAGS; `src/core/widgets/terminal_emulator.c`, `widget_builder.c`, `macro_recorder.c`, `src/core/recorder.c`, `src/core/animation.c` added; `test-fault` and `test-bench` targets added
+
+### Housekeeping
+- 119/119 behavioral tests passing
+- 14/14 C test suite tests passing
+- 20/20 GUI integration tests passing
+- Zero compilation errors; warnings limited to intentional truncation and unused parameters
+- 36 widgets: 33 original + terminal_emulator + widget_builder + macro_recorder
+- 4 backends: terminal, gcore (DRM/X11/Wayland), headless, headless pixel
+- Source tree additions: `src/core/animation.c`, `src/builder/` (7 files), `src/builder/build-spec.md`
+- 87 unpushed commits
+
 ## v0.4.0 (2026-07-23) — FILLY
 
 ### Changed

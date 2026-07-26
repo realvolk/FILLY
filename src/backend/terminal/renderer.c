@@ -205,6 +205,17 @@ static void render_node(RenderTree *node, int off_x, int off_y,
     if (w <= 0 || h <= 0) return;
     WidgetStyle *ws = &node->resolved_style;
 
+    if (node->resolved_style.opacity < 0.3f) {
+        ws->fg_color = 0;
+        return;
+    }
+    if (node->resolved_style.opacity < 0.7f && node->resolved_style.opacity >= 0.3f) {
+        uint8_t r = (ws->fg_color >> 16) & 0xFF;
+        uint8_t g = (ws->fg_color >> 8) & 0xFF;
+        uint8_t b = ws->fg_color & 0xFF;
+        ws->fg_color = ((r/2) << 16) | ((g/2) << 8) | (b/2) | 0xFF000000;
+    }
+
     switch (node->type) {
     case RNODE_CONTAINER:
         if (node->container.border != BORDER_NONE) {

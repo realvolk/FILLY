@@ -12,6 +12,16 @@ static int font_data_size = 0;
 static stbtt_fontinfo font_info;
 bool gcore_font_loaded = false;
 
+#define GLYPH_CACHE_SIZE 256
+typedef struct {
+    int codepoint;
+    int size;
+    unsigned char *bitmap;
+    int w, h;
+} GlyphCacheEntry;
+static GlyphCacheEntry glyph_cache[GLYPH_CACHE_SIZE];
+static int glyph_cache_count = 0;
+
 uint32_t gcore_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
@@ -26,6 +36,12 @@ bool gcore_init_font(const char *font_path, int default_size) {
     if (!f) f = fopen("/usr/share/fonts/truetype/DejaVuSans.ttf", "rb");
     if (!f) f = fopen("/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "rb");
     if (!f) f = fopen("/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf", "rb");
+    if (!f) {
+        f = fopen("/usr/share/fonts/noto/NotoSansCJK-Regular.ttc", "rb");
+    }
+    if (!f) {
+        f = fopen("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttf", "rb");
+    }
     if (!f) return false;
     fseek(f, 0, SEEK_END);
     font_data_size = ftell(f);
@@ -38,12 +54,41 @@ bool gcore_init_font(const char *font_path, int default_size) {
         return false;
     }
     gcore_font_loaded = true;
+    memset(glyph_cache, 0, sizeof(glyph_cache));
+    glyph_cache_count = 0;
     return true;
 }
 
 void gcore_shutdown_font(void) {
+    for (int i = 0; i < glyph_cache_count; i++) free(glyph_cache[i].bitmap);
+    glyph_cache_count = 0;
     free(font_data); font_data = NULL;
     gcore_font_loaded = false;
+}
+
+static unsigned char *glyph_cache_get(int codepoint, int size, int *w, int *h) {
+    for (int i = 0; i < glyph_cache_count; i++) {
+        if (glyph_cache[i].codepoint == codepoint && glyph_cache[i].size == size) {
+            *w = glyph_cache[i].w;
+            *h = glyph_cache[i].h;
+            return glyph_cache[i].bitmap;
+        }
+    }
+    return NULL;
+}
+
+__attribute__((unused)) static void glyph_cache_put(int codepoint, int size, unsigned char *bitmap, int w, int h) {
+    if (glyph_cache_count >= GLYPH_CACHE_SIZE) {
+        free(glyph_cache[0].bitmap);
+        memmove(&glyph_cache[0], &glyph_cache[1], (GLYPH_CACHE_SIZE - 1) * sizeof(GlyphCacheEntry));
+        glyph_cache_count--;
+    }
+    glyph_cache[glyph_cache_count].codepoint = codepoint;
+    glyph_cache[glyph_cache_count].size = size;
+    glyph_cache[glyph_cache_count].bitmap = bitmap;
+    glyph_cache[glyph_cache_count].w = w;
+    glyph_cache[glyph_cache_count].h = h;
+    glyph_cache_count++;
 }
 
 static void draw_rect(PixelBuffer *pb, int x, int y, int w, int h, uint32_t color) {
@@ -84,13 +129,16 @@ void draw_text_pixel(PixelBuffer *pb, int x, int y, const char *text, int size, 
     int baseline = (int)(ascent * scale);
     int pen_x = x;
     while (*text) {
-        int advance, lsb;
-        stbtt_GetCodepointHMetrics(&font_info, *text, &advance, &lsb);
-        int x0 = pen_x + (int)(lsb * scale);
-        int y0 = y + baseline;
         int cw, ch;
-        unsigned char *bitmap = stbtt_GetCodepointBitmap(&font_info, scale, scale, *text, &cw, &ch, NULL, NULL);
+        unsigned char *bitmap = glyph_cache_get(*text, size, &cw, &ch);
+        if (!bitmap) {
+            bitmap = stbtt_GetCodepointBitmap(&font_info, scale, scale, *text, &cw, &ch, NULL, NULL);
+        }
         if (bitmap) {
+            int advance, lsb;
+            stbtt_GetCodepointHMetrics(&font_info, *text, &advance, &lsb);
+            int x0 = pen_x + (int)(lsb * scale);
+            int y0 = y + baseline;
             for (int row = 0; row < ch; row++) {
                 for (int col = 0; col < cw; col++) {
                     uint8_t alpha = bitmap[row * cw + col];
@@ -109,9 +157,8 @@ void draw_text_pixel(PixelBuffer *pb, int x, int y, const char *text, int size, 
                     }
                 }
             }
-            stbtt_FreeBitmap(bitmap, NULL);
+            pen_x += (int)(advance * scale);
         }
-        pen_x += (int)(advance * scale);
         text++;
     }
 }
@@ -139,11 +186,16 @@ static void update_hover_states(RenderTree *node, int mx, int my, int off_x, int
     bool inside = (mx >= x && mx < x + node->rect.w && my >= y && my < y + node->rect.h);
     if (inside) {
         if (!node->state || strcmp(node->state, "hover") != 0) {
-            if (node->state) free(node->state);
+            if (node->state && node->state_owned) free(node->state);
             node->state = strdup("hover");
+            node->state_owned = true;
         }
     } else {
-        if (node->state) { free(node->state); node->state = NULL; }
+        if (node->state && node->state_owned) {
+            free(node->state);
+            node->state = NULL;
+            node->state_owned = false;
+        }
     }
     if (node->type == RNODE_CONTAINER && node->container.children) {
         WidgetStyle *s = &node->resolved_style;
@@ -156,14 +208,35 @@ static void update_hover_states(RenderTree *node, int mx, int my, int off_x, int
     }
 }
 
-static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb, Theme *theme, Arena *arena, bool parent_dirty) {
+static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb, Theme *theme, Arena *arena, bool parent_dirty, Rect dirty_rect) {
     if (!node || node->rect.w <= 0 || node->rect.h <= 0) return;
     if (!node->dirty && !parent_dirty) return;
-    bool self_dirty = node->dirty;
-    node->dirty = false;
     int x = off_x + node->rect.x, y = off_y + node->rect.y;
     int w = node->rect.w, h = node->rect.h;
+    if (dirty_rect.w > 0 && dirty_rect.h > 0) {
+        if (x + w <= dirty_rect.x || x >= dirty_rect.x + dirty_rect.w ||
+            y + h <= dirty_rect.y || y >= dirty_rect.y + dirty_rect.h) return;
+    }
+    bool self_dirty = node->dirty;
+    node->dirty = false;
     WidgetStyle *s = &node->resolved_style;
+
+    float sx = node->resolved_style.scale_x;
+    float sy = node->resolved_style.scale_y;
+    float rot = node->resolved_style.rotation;
+    float tx = node->resolved_style.translate_x;
+    float ty = node->resolved_style.translate_y;
+
+    if (sx != 1.0f || sy != 1.0f || rot != 0.0f || tx != 0.0f || ty != 0.0f) {
+        int cx = x + w / 2;
+        int cy = y + h / 2;
+        int new_w = (int)(w * sx);
+        int new_h = (int)(h * sy);
+        x = cx - new_w / 2 + (int)tx;
+        y = cy - new_h / 2 + (int)ty;
+        w = new_w;
+        h = new_h;
+    }
 
     draw_rounded_rect(pb, x, y, w, h, s->border_radius, s->bg_color);
     if (s->border_width > 0 && node->type == RNODE_CONTAINER)
@@ -188,7 +261,7 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
         break;
     case RNODE_CONTAINER:
         for (int i = 0; i < node->container.child_count; i++)
-            render_node(&node->container.children[i], content_x, content_y, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(&node->container.children[i], content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         break;
     case RNODE_LIST: {
         int item_h = s->font_size + s->padding[0] + s->padding[2];
@@ -325,20 +398,20 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
             lx += tw + 4;
         }
         if (node->tabs.child && tab_h < content_h)
-            render_node(node->tabs.child, content_x, content_y + tab_h, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(node->tabs.child, content_x, content_y + tab_h, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         break;
     }
     case RNODE_SPLIT_PANES: {
         int sp = node->split_panes.split_position > 0 ? node->split_panes.split_position :
                   (node->split_panes.orientation == ORIENT_HORIZONTAL ? content_w/2 : content_h/2);
         if (node->split_panes.orientation == ORIENT_HORIZONTAL) {
-            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
             draw_rect(pb, content_x + sp, content_y, 1, content_h, s->border_color);
-            render_node(node->split_panes.second, content_x + sp + 1, content_y, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(node->split_panes.second, content_x + sp + 1, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         } else {
-            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
             draw_rect(pb, content_x, content_y + sp, content_w, 1, s->border_color);
-            render_node(node->split_panes.second, content_x, content_y + sp + 1, pb, theme, arena, self_dirty || parent_dirty);
+            render_node(node->split_panes.second, content_x, content_y + sp + 1, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         }
         break;
     }
@@ -367,5 +440,18 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
 void gcore_render_tree_to_pixels(RenderTree *tree, PixelBuffer *pb, Theme *theme, Arena *arena) {
     if (!tree || !pb || !pb->pixels) return;
     update_hover_states(tree, pb->mouse_x, pb->mouse_y, 0, 0);
-    render_node(tree, 0, 0, pb, theme, arena, true);
+    Rect full = {0, 0, 0, 0};
+    render_node(tree, 0, 0, pb, theme, arena, true, full);
+
+#ifdef FILLY_PROFILING
+    extern double session_current_fps;
+    extern Arena *g_session_arena;
+    if (session_current_fps > 0 && gcore_font_loaded) {
+        char hud[64];
+        snprintf(hud, sizeof(hud), "FPS:%.0f Arena:%zuKB",
+            session_current_fps,
+            g_session_arena ? g_session_arena->offset / 1024 : 0);
+        draw_text_pixel(pb, pb->width - 200, 5, hud, 10, 0xFF00FF00);
+    }
+#endif
 }

@@ -1,0 +1,10 @@
+name: valgrind
+on: [push, pull_request]
+jobs:
+  memcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y libsodium-dev valgrind
+      - run: make filly-test
+      - run: valgrind --leak-check=full --error-exitcode=1 ./filly-test

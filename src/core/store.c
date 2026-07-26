@@ -52,6 +52,11 @@ const char *store_get(Store *s, const char *key) {
     return NULL;
 }
 
+const char *store_get_safe(Store *s, const char *key) {
+    if (!s) return NULL;
+    return store_get(s, key);
+}
+
 void store_set(Store *s, const char *key, const char *value) {
     for (Entry *e = s->head; e; e = e->next) {
         if (strcmp(e->key, key) == 0) {

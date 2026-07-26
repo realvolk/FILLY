@@ -7,6 +7,8 @@
 typedef struct {
     int pipe_fd[2];
     pid_t child_pid;
+    char *so_path;
+    void *dl_handle;
 } SandboxHandle;
 
 bool sandbox_spawn(const char *so_path, const char *widget_name, const char *json_params, SandboxHandle *handle);

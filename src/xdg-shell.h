@@ -1,16 +1,19 @@
-/* xdg-shell.h — Minimal xdg-shell + xdg-decoration protocol bindings for FILLY
- * -----------------------------------------------------------------------------
- * Hand-rolled from the Wayland XML protocol definitions.
- * Only the interfaces FILLY actually uses.
- * No generated code, no wayland-scanner dependency.
- * -----------------------------------------------------------------------------
- */
 #ifndef FILLY_XDG_SHELL_H
 #define FILLY_XDG_SHELL_H
 
 #include <wayland-client.h>
 
-/* ── xdg_wm_base ───────────────────────────────────────────────────────── */
+struct xdg_wm_base;
+struct xdg_surface;
+struct xdg_toplevel;
+struct zxdg_decoration_manager_v1;
+struct zxdg_toplevel_decoration_v1;
+
+extern const struct wl_interface xdg_wm_base_interface;
+extern const struct wl_interface xdg_surface_interface;
+extern const struct wl_interface xdg_toplevel_interface;
+extern const struct wl_interface zxdg_decoration_manager_v1_interface;
+extern const struct wl_interface zxdg_toplevel_decoration_v1_interface;
 
 #define XDG_WM_BASE_PONG 3
 #define XDG_WM_BASE_GET_XDG_SURFACE 2
@@ -40,8 +43,6 @@ xdg_wm_base_add_listener(struct xdg_wm_base *wm_base,
     return wl_proxy_add_listener((struct wl_proxy *)wm_base,
         (void (**)(void))listener, data);
 }
-
-/* ── xdg_surface ──────────────────────────────────────────────────────── */
 
 #define XDG_SURFACE_GET_TOPLEVEL 1
 #define XDG_SURFACE_ACK_CONFIGURE 4
@@ -81,8 +82,6 @@ xdg_surface_add_listener(struct xdg_surface *surface,
         (void (**)(void))listener, data);
 }
 
-/* ── xdg_toplevel ─────────────────────────────────────────────────────── */
-
 #define XDG_TOPLEVEL_SET_TITLE 2
 #define XDG_TOPLEVEL_SET_APP_ID 3
 #define XDG_TOPLEVEL_SET_MIN_SIZE 8
@@ -119,18 +118,14 @@ xdg_toplevel_add_listener(struct xdg_toplevel *toplevel,
         (void (**)(void))listener, data);
 }
 
-/* ── zxdg_decoration_manager_v1 ───────────────────────────────────────── */
-
 #define ZXDG_TOPLEVEL_DECORATION_V1_SET_MODE 1
 #define ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE 2
-
-struct zxdg_toplevel_decoration_v1;
 
 static inline struct zxdg_toplevel_decoration_v1 *
 zxdg_decoration_manager_v1_get_toplevel_decoration(
     struct zxdg_decoration_manager_v1 *manager, struct xdg_toplevel *toplevel) {
     struct wl_proxy *id = wl_proxy_marshal_flags(
-        (struct wl_proxy *)manager, 1, /* get_toplevel_decoration = opcode 1 */
+        (struct wl_proxy *)manager, 1,
         &zxdg_toplevel_decoration_v1_interface,
         wl_proxy_get_version((struct wl_proxy *)manager), 0, NULL, toplevel);
     return (struct zxdg_toplevel_decoration_v1 *)id;
@@ -144,4 +139,14 @@ zxdg_toplevel_decoration_v1_set_mode(
         wl_proxy_get_version((struct wl_proxy *)decoration), 0, mode);
 }
 
-#endif /* FILLY_XDG_SHELL_H */
+static inline void
+zxdg_toplevel_decoration_v1_destroy(struct zxdg_toplevel_decoration_v1 *decoration) {
+    wl_proxy_destroy((struct wl_proxy *)decoration);
+}
+
+static inline void
+zxdg_decoration_manager_v1_destroy(struct zxdg_decoration_manager_v1 *manager) {
+    wl_proxy_destroy((struct wl_proxy *)manager);
+}
+
+#endif

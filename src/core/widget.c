@@ -5,6 +5,7 @@
 typedef struct RegistryEntry_s {
     char *name;
     WidgetFactory factory;
+    bool is_plugin;
     struct RegistryEntry_s *next;
 } RegistryEntry;
 
@@ -29,8 +30,32 @@ void widget_registry_register(const char *name, WidgetFactory factory) {
     RegistryEntry *e = malloc(sizeof(RegistryEntry));
     e->name = strdup(name);
     e->factory = factory;
+    e->is_plugin = false;
     e->next = registry;
     registry = e;
+}
+
+void widget_registry_register_plugin(const char *name, WidgetFactory factory) {
+    RegistryEntry *e = malloc(sizeof(RegistryEntry));
+    e->name = strdup(name);
+    e->factory = factory;
+    e->is_plugin = true;
+    e->next = registry;
+    registry = e;
+}
+
+void widget_registry_clear_plugins(void) {
+    RegistryEntry **prev = &registry;
+    while (*prev) {
+        RegistryEntry *e = *prev;
+        if (e->is_plugin) {
+            *prev = e->next;
+            free(e->name);
+            free(e);
+        } else {
+            prev = &e->next;
+        }
+    }
 }
 
 Widget *widget_registry_create(const WidgetRequest *req) {
@@ -41,6 +66,23 @@ Widget *widget_registry_create(const WidgetRequest *req) {
         }
     }
     return NULL;
+}
+
+bool widget_registry_enum(int *idx, const char **name, WidgetFactory *factory) {
+    RegistryEntry *e = registry;
+    for (int i = 0; i < *idx && e; i++) e = e->next;
+    if (!e) return false;
+    *name = e->name;
+    *factory = e->factory;
+    (*idx)++;
+    return true;
+}
+
+int widget_registry_count(void) {
+    int count = 0;
+    RegistryEntry *e = registry;
+    while (e) { count++; e = e->next; }
+    return count;
 }
 
 void widget_destroy(Widget *w) {

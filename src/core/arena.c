@@ -1,3 +1,4 @@
+/* src/core/arena.c */
 #include "arena.h"
 #include <stdlib.h>
 #include <string.h>
@@ -6,10 +7,7 @@ Arena *arena_new(size_t initial_capacity) {
     Arena *a = malloc(sizeof(Arena));
     if (!a) return NULL;
     a->buffer = malloc(initial_capacity);
-    if (!a->buffer) {
-        free(a);
-        return NULL;
-    }
+    if (!a->buffer) { free(a); return NULL; }
     a->capacity = initial_capacity;
     a->offset = 0;
     return a;
@@ -33,6 +31,7 @@ void *arena_alloc(Arena *a, size_t size) {
     }
     void *ptr = a->buffer + a->offset;
     a->offset += aligned;
+    memset(ptr, 0, aligned);
     return ptr;
 }
 
@@ -53,10 +52,7 @@ void arena_maybe_shrink(Arena *a) {
         size_t new_cap = used * 2;
         if (new_cap < 1024 * 1024) new_cap = 1024 * 1024;
         char *new_buf = realloc(a->buffer, new_cap);
-        if (new_buf) {
-            a->buffer = new_buf;
-            a->capacity = new_cap;
-        }
+        if (new_buf) { a->buffer = new_buf; a->capacity = new_cap; }
     }
 }
 

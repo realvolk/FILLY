@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Euo pipefail
-FILLY="../filly"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FILLY="${SCRIPT_DIR}/../filly"
 PASS=0; FAIL=0; SKIP=0
 TOTAL=0
 TEST_DIR="/tmp/filly-gui-tests"
@@ -21,12 +22,14 @@ assert_file() {
 printf "${CYAN}=== FILLY GUI Integration Tests ===${NC}\n\n"
 
 printf "${YELLOW}--- Pixel Renderer (Headless GUI) ---${NC}\n"
-make -C .. pixel-test 2>/dev/null
-if [[ -f ../pixel-test ]]; then
-    (cd .. && ./pixel-test > /dev/null 2>&1)
-    assert_file "pixel renderer produces output" "../pixel_test.ppm"
-    if [[ -f ../pixel_test.ppm ]]; then
-        SIZE=$(wc -c < ../pixel_test.ppm)
+PIXEL_TEST="${SCRIPT_DIR}/../pixel-test"
+PIXEL_TEST_PPM="${SCRIPT_DIR}/../pixel_test.ppm"
+
+if [[ -f "${PIXEL_TEST}" ]]; then
+    "${PIXEL_TEST}" > /dev/null 2>&1
+    assert_file "pixel renderer produces output" "${PIXEL_TEST_PPM}"
+    if [[ -f "${PIXEL_TEST_PPM}" ]]; then
+        SIZE=$(wc -c < "${PIXEL_TEST_PPM}")
         TOTAL=$((TOTAL+1))
         if [[ ${SIZE} -gt 1000 ]]; then
             printf "${GREEN}[PASS]${NC} pixel output non-trivial (${SIZE} bytes)\n"; PASS=$((PASS+1))
@@ -74,11 +77,13 @@ int main(void) {
         memset(child, 0, sizeof(RenderTree));
         child->type = RNODE_TEXT;
         child->rect = rect_new(20, 20, 600, 40);
+        child->resolved_style = widgetstyle_default();
+        child->resolved_style.font_size = 14;
+        child->resolved_style.fg_color = gcore_rgba(255, 255, 255, 255);
         char buf[128];
         snprintf(buf, sizeof(buf), "Widget: %s", widgets[i]);
         child->text.content = arena_strdup(arena, buf);
         child->style_class = "text";
-        child->state = "title";
 
         tree.container.children = child;
         tree.container.child_count = 1;

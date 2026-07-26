@@ -1,0 +1,13 @@
+name: openbsd
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/openbsd-vm@v1
+        with:
+          run: |
+            pkg_add libsodium
+            make filly-test
+            ./filly-test

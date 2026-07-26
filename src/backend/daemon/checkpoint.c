@@ -25,7 +25,7 @@ bool checkpoint_save(Session *sessions, int count) {
     mkdir(dir, 0700);
     char filepath[2048];
     snprintf(filepath, sizeof(filepath), "%s/checkpoint.json", dir);
-    char tmpfile[2048];
+    char tmpfile[2560];
     snprintf(tmpfile, sizeof(tmpfile), "%s.tmp", filepath);
 
     FILE *fp = fopen(tmpfile, "w");

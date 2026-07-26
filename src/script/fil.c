@@ -14,7 +14,8 @@ typedef enum {
     TOK_REJECT, TOK_WITH, TOK_ACCEPT, TOK_SHOW, TOK_FOR, TOK_EACH,
     TOK_IN, TOK_DO, TOK_IS, TOK_NOT, TOK_MATCHES, TOK_AND, TOK_OR,
     TOK_EMPTY, TOK_OF, TOK_LESS, TOK_GREATER, TOK_THAN,
-    TOK_STYLE, TOK_ANIMATE, TOK_KEYMAP, TOK_KEY, TOK_LBRACE, TOK_RBRACE,
+    TOK_STYLE, TOK_ANIMATE, TOK_STOP, TOK_PAUSE, TOK_RESUME,
+    TOK_ANIMATION, TOK_ON, TOK_KEYMAP, TOK_KEY, TOK_LBRACE, TOK_RBRACE,
     TOK_IDENT, TOK_STRING, TOK_NUMBER, TOK_EOF
 } TokenType;
 
@@ -131,6 +132,11 @@ static void next_token(Parser *p) {
         else if (strcmp(word, "than") == 0) p->current = make_token(TOK_THAN, word, 0);
         else if (strcmp(word, "style") == 0) p->current = make_token(TOK_STYLE, word, 0);
         else if (strcmp(word, "animate") == 0) p->current = make_token(TOK_ANIMATE, word, 0);
+        else if (strcmp(word, "stop") == 0) p->current = make_token(TOK_STOP, word, 0);
+        else if (strcmp(word, "pause") == 0) p->current = make_token(TOK_PAUSE, word, 0);
+        else if (strcmp(word, "resume") == 0) p->current = make_token(TOK_RESUME, word, 0);
+        else if (strcmp(word, "animation") == 0) p->current = make_token(TOK_ANIMATION, word, 0);
+        else if (strcmp(word, "on") == 0) p->current = make_token(TOK_ON, word, 0);
         else if (strcmp(word, "keymap") == 0) p->current = make_token(TOK_KEYMAP, word, 0);
         else if (strcmp(word, "key") == 0) p->current = make_token(TOK_KEY, word, 0);
         else p->current = make_token(TOK_IDENT, word, 0);
@@ -224,6 +230,7 @@ typedef struct {
     const char *(*store_get)(const char *key); const char *value; int loop_count;
     char **style_widget; char **style_props; int style_count;
     char **keymap_bindings; int keymap_count;
+    char **animation_names; char **animation_targets; int animation_count;
 } EvalState;
 
 static bool eval_statement(Parser *p, EvalState *s);
@@ -293,8 +300,54 @@ static bool eval_keymap_block(Parser *p, EvalState *s) {
     return true;
 }
 
+static bool eval_animate_statement(Parser *p, EvalState *s) {
+    if (!match(p, TOK_ANIMATE)) return false;
+    if (p->current.type != TOK_STRING) return false;
+    char *target = strdup(p->current.text);
+    next_token(p);
+    if (!match(p, TOK_WITH)) { free(target); return false; }
+    if (p->current.type != TOK_STRING) { free(target); return false; }
+    char *name = strdup(p->current.text);
+    next_token(p);
+
+    s->animation_count++;
+    s->animation_targets = realloc(s->animation_targets, s->animation_count * sizeof(char *));
+    s->animation_names = realloc(s->animation_names, s->animation_count * sizeof(char *));
+    s->animation_targets[s->animation_count - 1] = target;
+    s->animation_names[s->animation_count - 1] = name;
+    return true;
+}
+
+static bool eval_animation_control(Parser *p, EvalState *s) {
+    bool is_stop = (p->current.type == TOK_STOP);
+    bool is_pause = false;
+
+    if (is_stop) next_token(p);
+    else if (match(p, TOK_PAUSE)) is_pause = true;
+    else if (match(p, TOK_RESUME)) { /*below*/ }
+    else return false;
+
+    if (!match(p, TOK_ANIMATION)) return false;
+    if (!match(p, TOK_ON)) return false;
+    if (p->current.type != TOK_STRING) return false;
+    char *target = strdup(p->current.text);
+    next_token(p);
+
+    const char *action = is_stop ? "stop" : is_pause ? "pause" : "resume";
+    s->animation_count++;
+    s->animation_targets = realloc(s->animation_targets, s->animation_count * sizeof(char *));
+    s->animation_names = realloc(s->animation_names, s->animation_count * sizeof(char *));
+    s->animation_targets[s->animation_count - 1] = target;
+    s->animation_names[s->animation_count - 1] = strdup(action);
+    return true;
+}
+
 static bool eval_statement(Parser *p, EvalState *s) {
     if (s->loop_count > 10000) return false;
+    if (match(p, TOK_ANIMATE)) { p->pos -= 7; next_token(p); return eval_animate_statement(p, s); }
+    if (match(p, TOK_STOP)) { p->pos -= 4; next_token(p); return eval_animation_control(p, s); }
+    if (match(p, TOK_PAUSE)) { p->pos -= 5; next_token(p); return eval_animation_control(p, s); }
+    if (match(p, TOK_RESUME)) { p->pos -= 6; next_token(p); return eval_animation_control(p, s); }
     if (match(p, TOK_STYLE)) { p->pos -= 5; next_token(p); return eval_style_block(p, s); }
     if (match(p, TOK_KEYMAP)) { p->pos -= 6; next_token(p); return eval_keymap_block(p, s); }
     if (match(p, TOK_WHEN)) {
@@ -364,6 +417,9 @@ FilResult *fil_eval(const char *script, const char *(*store_get)(const char *key
     r->style_count = s.style_count;
     r->keymap_bindings = s.keymap_bindings;
     r->keymap_count = s.keymap_count;
+    r->animation_names = s.animation_names;
+    r->animation_targets = s.animation_targets;
+    r->animation_count = s.animation_count;
     return r;
 }
 
@@ -376,5 +432,7 @@ void fil_result_free(FilResult *r) {
     free(r->style_widget); free(r->style_props);
     for (int i = 0; i < r->keymap_count; i++) { free(r->keymap_bindings[i]); }
     free(r->keymap_bindings);
+    for (int i = 0; i < r->animation_count; i++) { free(r->animation_names[i]); free(r->animation_targets[i]); }
+    free(r->animation_names); free(r->animation_targets);
     free(r);
 }

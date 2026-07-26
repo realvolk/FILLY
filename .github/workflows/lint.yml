@@ -1,0 +1,15 @@
+name: lint
+on: [push, pull_request]
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y libsodium-dev clang-tidy
+      - run: make lint || true
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y cppcheck
+      - run: make cppcheck || true

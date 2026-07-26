@@ -5,8 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <math.h>
+#include "core/animation.h"
 
-static uint32_t parse_color(const char *s) {
+uint32_t parse_color(const char *s) {
     if (!s) return 0xFF000000;
     if (s[0] == '#') s++;
     unsigned int r = 0, g = 0, b = 0, a = 255;
@@ -14,6 +16,94 @@ static uint32_t parse_color(const char *s) {
     if (len == 6) sscanf(s, "%02x%02x%02x", &r, &g, &b);
     else if (len == 8) sscanf(s, "%02x%02x%02x%02x", &r, &g, &b, &a);
     return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+static char *color_to_hex(uint32_t c) {
+    char *hex = malloc(10);
+    snprintf(hex, 10, "#%02x%02x%02x%02x", (c>>24)&0xFF, (c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
+    return hex;
+}
+
+static int clamp_int(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+static float clamp_float(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+static uint32_t color_lighten(uint32_t c, float amount) {
+    int r = ((c>>16)&0xFF) + (int)(255*amount);
+    int g = ((c>>8)&0xFF) + (int)(255*amount);
+    int b = (c&0xFF) + (int)(255*amount);
+    int a = (c>>24)&0xFF;
+    r = clamp_int(r, 0, 255); g = clamp_int(g, 0, 255); b = clamp_int(b, 0, 255);
+    return (a<<24)|(r<<16)|(g<<8)|b;
+}
+
+static uint32_t color_darken(uint32_t c, float amount) {
+    int r = ((c>>16)&0xFF) - (int)(255*amount);
+    int g = ((c>>8)&0xFF) - (int)(255*amount);
+    int b = (c&0xFF) - (int)(255*amount);
+    int a = (c>>24)&0xFF;
+    r = clamp_int(r, 0, 255); g = clamp_int(g, 0, 255); b = clamp_int(b, 0, 255);
+    return (a<<24)|(r<<16)|(g<<8)|b;
+}
+
+static uint32_t color_alpha(uint32_t c, float amount) {
+    int a = clamp_int((int)(((c>>24)&0xFF) * amount), 0, 255);
+    return (a<<24)|(c&0x00FFFFFF);
+}
+
+static uint32_t color_mix(uint32_t c1, uint32_t c2, float t) {
+    t = clamp_float(t, 0.0f, 1.0f);
+    int r = (int)(((c1>>16)&0xFF)*(1-t) + ((c2>>16)&0xFF)*t);
+    int g = (int)(((c1>>8)&0xFF)*(1-t) + ((c2>>8)&0xFF)*t);
+    int b = (int)((c1&0xFF)*(1-t) + (c2&0xFF)*t);
+    int a = (int)(((c1>>24)&0xFF)*(1-t) + ((c2>>24)&0xFF)*t);
+    return (a<<24)|(r<<16)|(g<<8)|b;
+}
+
+static char *resolve_var(Theme *t, const char *value);
+
+static char *apply_color_function(const char *func_name, const char *arg, Theme *t) {
+    char *resolved = resolve_var(t, arg);
+    if (!resolved) return strdup("#00000000");
+    uint32_t base = parse_color(resolved);
+    free(resolved);
+    if (strcmp(func_name, "lighten") == 0) return color_to_hex(color_lighten(base, 0.2f));
+    if (strcmp(func_name, "darken") == 0) return color_to_hex(color_darken(base, 0.2f));
+    if (strcmp(func_name, "alpha") == 0) return color_to_hex(color_alpha(base, 0.5f));
+    return strdup(arg);
+}
+
+static char *resolve_var(Theme *t, const char *value) {
+    if (!value) return strdup("");
+    if (value[0] != '$') return strdup(value);
+    const char *name = value + 1;
+    if (strncmp(name, "lighten(", 8) == 0) {
+        char *paren = strchr((char*)name + 8, ')');
+        if (paren) { *paren = '\0'; char *r = apply_color_function("lighten", name + 8, t); *paren = ')'; return r; }
+    }
+    if (strncmp(name, "darken(", 7) == 0) {
+        char *paren = strchr((char*)name + 7, ')');
+        if (paren) { *paren = '\0'; char *r = apply_color_function("darken", name + 7, t); *paren = ')'; return r; }
+    }
+    if (strncmp(name, "alpha(", 6) == 0) {
+        char *paren = strchr((char*)name + 6, ')');
+        if (paren) { *paren = '\0'; char *r = apply_color_function("alpha", name + 6, t); *paren = ')'; return r; }
+    }
+    if (strncmp(name, "mix(", 4) == 0) {
+        char *comma1 = strchr((char*)name + 4, ',');
+        char *comma2 = comma1 ? strchr(comma1 + 1, ',') : NULL;
+        char *paren = comma2 ? strchr(comma2 + 1, ')') : NULL;
+        if (comma1 && comma2 && paren) {
+            *comma1 = '\0'; *comma2 = '\0'; *paren = '\0';
+            uint32_t c1 = parse_color(resolve_var(t, name + 4));
+            uint32_t c2 = parse_color(resolve_var(t, comma1 + 1));
+            float amt = atof(comma2 + 1);
+            *comma1 = ','; *comma2 = ','; *paren = ')';
+            return color_to_hex(color_mix(c1, c2, amt));
+        }
+    }
+    for (int i = 0; i < t->var_count; i++)
+        if (strcmp(t->vars[i].name, name) == 0) return strdup(t->vars[i].value);
+    return strdup(value);
 }
 
 static int parse_int(cJSON *o, const char *key, int def) {
@@ -35,20 +125,13 @@ static bool parse_bool(cJSON *o, const char *key, bool def) {
     return def;
 }
 
+static char *resolve_var(Theme *t, const char *value);
+
 static Alignment parse_align(const char *s) {
     if (!s) return ALIGN_LEFT;
     if (strcmp(s, "center") == 0) return ALIGN_CENTER;
     if (strcmp(s, "right") == 0) return ALIGN_RIGHT;
     return ALIGN_LEFT;
-}
-
-static char *resolve_var(Theme *t, const char *value) {
-    if (!value || value[0] != '$') return strdup(value);
-    for (int i = 0; i < t->var_count; i++) {
-        if (strcmp(t->vars[i].name, value + 1) == 0)
-            return strdup(t->vars[i].value);
-    }
-    return strdup(value);
 }
 
 static WidgetStyle parse_widget_style(cJSON *obj, Theme *t) {
@@ -111,8 +194,7 @@ static WidgetStyle parse_widget_style(cJSON *obj, Theme *t) {
 }
 
 static void merge_style(WidgetStyle *dst, WidgetStyle *src) {
-    if (src->fg_color != 0xFF000000)
-        dst->fg_color = src->fg_color;
+    if (src->fg_color != 0xFF000000) dst->fg_color = src->fg_color;
     if (src->bg_color != 0) dst->bg_color = src->bg_color;
     dst->border_color = src->border_color;
     dst->accent_color = src->accent_color;
@@ -159,15 +241,9 @@ static StyleRule *parse_style_rules(cJSON *widgets_obj, Theme *t) {
         StyleRule *rule = calloc(1, sizeof(StyleRule));
         rule->widget_class = strdup(selector);
         char *colon = strchr(rule->widget_class, ':');
-        if (colon) {
-            *colon = '\0';
-            rule->state = strdup(colon + 1);
-        }
+        if (colon) { *colon = '\0'; rule->state = strdup(colon + 1); }
         char *space = strchr(rule->widget_class, ' ');
-        if (space) {
-            *space = '\0';
-            rule->child_class = strdup(space + 1);
-        }
+        if (space) { *space = '\0'; rule->child_class = strdup(space + 1); }
         rule->style = parse_widget_style(child, t);
         rule->next = head;
         head = rule;
@@ -206,13 +282,14 @@ Theme *theme_load(const char *path) {
         while (v && vi < t->var_count) {
             t->vars[vi].name = strdup(v->string);
             t->vars[vi].value = v->valuestring ? strdup(v->valuestring) : strdup("");
-            vi++;
-            v = v->next;
+            vi++; v = v->next;
         }
     }
 
     cJSON *widgets = cJSON_GetObjectItem(root, "widgets");
     if (widgets) t->rules = parse_style_rules(widgets, t);
+    cJSON *animations = cJSON_GetObjectItem(root, "animations");
+    if (animations) animation_registry_load_from_theme(animations);
     cJSON_Delete(root);
 
     if (extends && cJSON_IsArray(extends)) {
@@ -222,12 +299,11 @@ Theme *theme_load(const char *path) {
             if (ext->valuestring) {
                 char base_path[4096];
                 const char *last_slash = strrchr(path, '/');
-                if (last_slash) {
+                if (last_slash)
                     snprintf(base_path, sizeof(base_path), "%.*s/%s.json",
                              (int)(last_slash - path), path, ext->valuestring);
-                } else {
+                else
                     snprintf(base_path, sizeof(base_path), "%s.json", ext->valuestring);
-                }
                 Theme *base = theme_load(base_path);
                 if (base) {
                     if (base->rules) {
@@ -241,9 +317,8 @@ Theme *theme_load(const char *path) {
                         int new_count = 0;
                         for (int j = 0; j < base->var_count; j++) {
                             bool found = false;
-                            for (int k = 0; k < t->var_count; k++) {
+                            for (int k = 0; k < t->var_count; k++)
                                 if (strcmp(base->vars[j].name, t->vars[k].name) == 0) { found = true; break; }
-                            }
                             if (!found) {
                                 new_vars[new_count].name = strdup(base->vars[j].name);
                                 new_vars[new_count].value = strdup(base->vars[j].value);
@@ -255,25 +330,20 @@ Theme *theme_load(const char *path) {
                             new_vars[new_count].value = t->vars[j].value;
                             new_count++;
                         }
-                        free(t->vars);
-                        t->vars = new_vars;
-                        t->var_count = new_count;
+                        free(t->vars); t->vars = new_vars; t->var_count = new_count;
                     }
-                    free(base->name);
-                    free(base->extends);
-                    free(base);
+                    free(base->name); free(base->extends); free(base);
                 }
             }
         }
     } else if (extends && extends->valuestring) {
         char base_path[4096];
         const char *last_slash = strrchr(path, '/');
-        if (last_slash) {
+        if (last_slash)
             snprintf(base_path, sizeof(base_path), "%.*s/%s.json",
                      (int)(last_slash - path), path, extends->valuestring);
-        } else {
+        else
             snprintf(base_path, sizeof(base_path), "%s.json", extends->valuestring);
-        }
         Theme *base = theme_load(base_path);
         if (base) {
             if (base->rules) {
@@ -287,9 +357,8 @@ Theme *theme_load(const char *path) {
                 int new_count = 0;
                 for (int i = 0; i < base->var_count; i++) {
                     bool found = false;
-                    for (int j = 0; j < t->var_count; j++) {
+                    for (int j = 0; j < t->var_count; j++)
                         if (strcmp(base->vars[i].name, t->vars[j].name) == 0) { found = true; break; }
-                    }
                     if (!found) {
                         new_vars[new_count].name = strdup(base->vars[i].name);
                         new_vars[new_count].value = strdup(base->vars[i].value);
@@ -301,13 +370,9 @@ Theme *theme_load(const char *path) {
                     new_vars[new_count].value = t->vars[j].value;
                     new_count++;
                 }
-                free(t->vars);
-                t->vars = new_vars;
-                t->var_count = new_count;
+                free(t->vars); t->vars = new_vars; t->var_count = new_count;
             }
-            free(base->name);
-            free(base->extends);
-            free(base);
+            free(base->name); free(base->extends); free(base);
         }
     }
     return t;
@@ -316,10 +381,6 @@ Theme *theme_load(const char *path) {
 Theme *theme_default(void) {
     Theme *t = calloc(1, sizeof(Theme));
     t->name = strdup("default");
-    t->extends = NULL;
-    t->rules = NULL;
-    t->vars = NULL;
-    t->var_count = 0;
     return t;
 }
 
@@ -330,18 +391,14 @@ void theme_free(Theme *t) {
     StyleRule *rule = t->rules;
     while (rule) {
         StyleRule *next = rule->next;
-        free(rule->widget_class);
-        free(rule->child_class);
-        free(rule->state);
+        free(rule->widget_class); free(rule->child_class); free(rule->state);
         free(rule->style.font_family);
         free(rule);
         rule = next;
     }
-    for (int i = 0; i < t->var_count; i++) {
-        free(t->vars[i].name);
-        free(t->vars[i].value);
-    }
+    for (int i = 0; i < t->var_count; i++) { free(t->vars[i].name); free(t->vars[i].value); }
     free(t->vars);
+    animation_registry_clear();
     free(t);
 }
 
@@ -350,11 +407,10 @@ WidgetStyle theme_resolve(Theme *t, const char *widget_class, const char *child_
     if (!t) return result;
     StyleRule *rule = t->rules;
     while (rule) {
-        bool widget_match = !rule->widget_class || strcmp(rule->widget_class, widget_class) == 0;
-        bool child_match = !rule->child_class || (child_class && strcmp(rule->child_class, child_class) == 0);
-        bool state_match = !rule->state || (state && strcmp(rule->state, state) == 0);
-        if (widget_match && child_match && state_match)
-            merge_style(&result, &rule->style);
+        bool wm = !rule->widget_class || strcmp(rule->widget_class, widget_class) == 0;
+        bool cm = !rule->child_class || (child_class && strcmp(rule->child_class, child_class) == 0);
+        bool sm = !rule->state || (state && strcmp(rule->state, state) == 0);
+        if (wm && cm && sm) merge_style(&result, &rule->style);
         rule = rule->next;
     }
     return result;
@@ -389,6 +445,70 @@ void theme_add_plugin_overrides(Theme *base, const char *plugin_dir) {
     last->next = plugin_themes;
 }
 
+void theme_merge_app_override(Theme *base, const char *path) {
+    if (!path) return;
+    Theme *app = theme_load(path);
+    if (!app) return;
+    if (app->rules) {
+        StyleRule *last = base->rules;
+        if (last) { while (last->next) last = last->next; last->next = app->rules; }
+        else base->rules = app->rules;
+        app->rules = NULL;
+    }
+    if (app->var_count > 0) {
+        for (int i = 0; i < app->var_count; i++) {
+            bool found = false;
+            for (int j = 0; j < base->var_count; j++) {
+                if (strcmp(base->vars[j].name, app->vars[i].name) == 0) {
+                    free(base->vars[j].value);
+                    base->vars[j].value = strdup(app->vars[i].value);
+                    found = true; break;
+                }
+            }
+            if (!found) {
+                base->var_count++;
+                base->vars = realloc(base->vars, base->var_count * sizeof(Variable));
+                base->vars[base->var_count-1].name = strdup(app->vars[i].name);
+                base->vars[base->var_count-1].value = strdup(app->vars[i].value);
+            }
+        }
+    }
+    theme_free(app);
+}
+
+void theme_merge_accessibility_profile(Theme *base, const char *profile_name) {
+    if (!profile_name) return;
+    char path[1024];
+    snprintf(path, sizeof(path), "themes/%s.json", profile_name);
+    Theme *a11y = theme_load(path);
+    if (!a11y) return;
+    if (a11y->rules) {
+        StyleRule *last = base->rules;
+        if (last) { while (last->next) last = last->next; last->next = a11y->rules; }
+        else base->rules = a11y->rules;
+        a11y->rules = NULL;
+    }
+    if (a11y->var_count > 0) {
+        for (int i = 0; i < a11y->var_count; i++) {
+            bool found = false;
+            for (int j = 0; j < base->var_count; j++) {
+                if (strcmp(base->vars[j].name, a11y->vars[i].name) == 0) {
+                    free(base->vars[j].value);
+                    base->vars[j].value = strdup(a11y->vars[i].value);
+                    found = true; break;
+                }
+            }
+            if (!found) {
+                base->var_count++;
+                base->vars = realloc(base->vars, base->var_count * sizeof(Variable));
+                base->vars[base->var_count-1].name = strdup(a11y->vars[i].name);
+                base->vars[base->var_count-1].value = strdup(a11y->vars[i].value);
+            }
+        }
+    }
+    theme_free(a11y);
+}
+
 void theme_apply_fil_styles(Theme *t, FilResult *fr) {
     if (!t || !fr) return;
     for (int i = 0; i < fr->style_count; i++) {
@@ -406,8 +526,7 @@ void theme_apply_fil_styles(Theme *t, FilResult *fr) {
                 char *pipe3 = strchr(pipe2 + 1, '|');
                 if (pipe3) {
                     *pipe3 = '\0';
-                    char *prop_name = pipe2 + 1;
-                    char *prop_val = pipe3 + 1;
+                    char *prop_name = pipe2 + 1, *prop_val = pipe3 + 1;
                     WidgetStyle s = widgetstyle_default();
                     if (strcmp(prop_name, "bg") == 0) s.bg_color = parse_color(prop_val);
                     else if (strcmp(prop_name, "fg") == 0) s.fg_color = parse_color(prop_val);
@@ -437,12 +556,8 @@ void theme_merge_user_override(Theme *base) {
     if (!override) return;
     if (override->rules) {
         StyleRule *last = base->rules;
-        if (last) {
-            while (last->next) last = last->next;
-            last->next = override->rules;
-        } else {
-            base->rules = override->rules;
-        }
+        if (last) { while (last->next) last = last->next; last->next = override->rules; }
+        else base->rules = override->rules;
         override->rules = NULL;
     }
     if (override->var_count > 0) {
@@ -452,8 +567,7 @@ void theme_merge_user_override(Theme *base) {
                 if (strcmp(base->vars[j].name, override->vars[i].name) == 0) {
                     free(base->vars[j].value);
                     base->vars[j].value = strdup(override->vars[i].value);
-                    found = true;
-                    break;
+                    found = true; break;
                 }
             }
             if (!found) {

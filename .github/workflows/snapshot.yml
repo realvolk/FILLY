@@ -1,0 +1,13 @@
+name: snapshot
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y libsodium-dev
+      - run: make snapshot
+      - run: ./snapshot --generate
+      - run: ./snapshot snapshot_ref.rgba
+      - run: ./snapshot --mode ansi --generate snapshot_ansi.txt
+      - run: ./snapshot snapshot_ansi.txt --mode ansi

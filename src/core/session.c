@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include "script/fil.h"
+#include "core/animation.h"
 
 Theme *g_active_theme = NULL;
 Store *g_active_store = NULL;
@@ -82,6 +84,8 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
         memset(&tree, 0, sizeof(tree));
         w->vtable.render(w, rect_new(0, 0, term_w, term_h), &tree);
         if (g_active_theme) resolve_node_styles(&tree, g_active_theme);
+        long long now = time_ms();
+        animation_update(&tree, now);
         backend->vtable->draw(backend->data, &tree);
         w->vtable.clear_dirty(w);
         last_frame = time_ms();
@@ -101,6 +105,8 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             memset(&tree, 0, sizeof(tree));
             w->vtable.render(w, rect_new(0, 0, term_w, term_h), &tree);
             if (g_active_theme) resolve_node_styles(&tree, g_active_theme);
+            long long now = time_ms();
+            animation_update(&tree, now);
             backend->vtable->draw(backend->data, &tree);
             w->vtable.clear_dirty(w);
             last_frame = time_ms();
@@ -128,6 +134,17 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             continue;
         }
         if (ev.type == EVENT_RESIZE || ev.type == EVENT_MOUSE_MOTION) {
+            continue;
+        }
+        if (ev.type == EVENT_KEY && ev.code == KEY_CHAR && ev.ch == 3) {
+            if (backend->vtable->copy_to_clipboard && session_clipboard &&
+                session_clipboard->has_clipboard && session_clipboard->has_clipboard(session_clipboard->data)) {
+                char *text = session_clipboard->get_clipboard(session_clipboard->data);
+                if (text) {
+                    backend->vtable->copy_to_clipboard(backend->data, text);
+                    free(text);
+                }
+            }
             continue;
         }
         if (ev.type == EVENT_KEY && ev.code == KEY_CHAR && ev.ch == 22) {
@@ -207,4 +224,46 @@ void session_clear_keymap(void) {
     free(keymap);
     keymap = NULL;
     keymap_count = 0;
+}
+
+void session_load_keymap_from_fil(FilResult *fr) {
+    if (!fr || fr->keymap_count == 0) return;
+    for (int i = 0; i < fr->keymap_count; i++) {
+        char *entry = fr->keymap_bindings[i];
+        char *scope = entry;
+        char *pipe1 = strchr(scope, '|');
+        if (!pipe1) continue;
+        *pipe1 = '\0';
+        char *key = pipe1 + 1;
+        char *pipe2 = strchr(key, '|');
+        if (!pipe2) { *pipe1 = '|'; continue; }
+        *pipe2 = '\0';
+        char *action = pipe2 + 1;
+
+        KeyCode code = KEY_NULL;
+        if (strcmp(key, "Escape") == 0) code = KEY_ESC;
+        else if (strcmp(key, "Enter") == 0) code = KEY_ENTER;
+        else if (strcmp(key, "Up") == 0) code = KEY_UP;
+        else if (strcmp(key, "Down") == 0) code = KEY_DOWN;
+        else if (strcmp(key, "Left") == 0) code = KEY_LEFT;
+        else if (strcmp(key, "Right") == 0) code = KEY_RIGHT;
+        else if (strcmp(key, "Tab") == 0) code = KEY_TAB;
+        else if (strlen(key) == 1) code = KEY_CHAR;
+
+        if (code != KEY_NULL) {
+            char ch = (code == KEY_CHAR) ? key[0] : 0;
+            if (strcmp(action, "back") == 0) { code = KEY_ESC; ch = 0; }
+            else if (strcmp(action, "select") == 0) code = KEY_ENTER;
+            else if (strcmp(action, "move-up") == 0) code = KEY_UP;
+            else if (strcmp(action, "move-down") == 0) code = KEY_DOWN;
+            else if (strcmp(action, "move-left") == 0) code = KEY_LEFT;
+            else if (strcmp(action, "move-right") == 0) code = KEY_RIGHT;
+            else if (strcmp(action, "confirm") == 0) code = KEY_ENTER;
+            else if (strcmp(action, "cancel") == 0) code = KEY_ESC;
+            session_load_keymap(key, code, ch);
+        }
+
+        *pipe1 = '|';
+        if (pipe2) *pipe2 = '|';
+    }
 }

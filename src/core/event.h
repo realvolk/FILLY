@@ -10,7 +10,8 @@ typedef enum {
 } KeyCode;
 
 typedef enum {
-    EVENT_NONE, EVENT_KEY, EVENT_RESIZE, EVENT_MOUSE_MOTION, EVENT_MOUSE_BUTTON, EVENT_MOUSE_SCROLL
+    EVENT_NONE, EVENT_KEY, EVENT_RESIZE, EVENT_MOUSE_MOTION, EVENT_MOUSE_BUTTON,
+    EVENT_MOUSE_SCROLL, EVENT_MOUSE_DRAG_START, EVENT_MOUSE_DRAG_MOVE, EVENT_MOUSE_DRAG_END
 } EventType;
 
 typedef enum {
@@ -25,4 +26,6 @@ typedef struct {
     int x, y;
     int button;
     MouseState mouse_state;
+    int drag_start_x, drag_start_y;
+    int drag_dx, drag_dy;
 } Event;

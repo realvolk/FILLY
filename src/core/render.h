@@ -4,6 +4,7 @@
 
 struct Arena;
 typedef struct Theme_s Theme;
+struct AnimInstance;
 
 typedef struct { int x, y, w, h; } Rect;
 
@@ -28,6 +29,9 @@ typedef struct {
     bool bg_gradient;
     uint32_t bg_gradient_to;
     int bg_gradient_direction, transition_ms;
+    float scale_x, scale_y;
+    float rotation;
+    float translate_x, translate_y;
 } WidgetStyle;
 
 typedef struct { char *fg, *bg; bool bold, italic, underline; } TextStyle;
@@ -43,6 +47,14 @@ typedef struct {
     int choice_count;
 } FormField;
 
+typedef struct {
+    Rect parent_rect;
+    int screen_width, screen_height;
+    bool is_modal;
+    const char *active_profile;
+    int depth;
+} WidgetContext;
+
 typedef enum {
     RNODE_CONTAINER, RNODE_TEXT, RNODE_LIST, RNODE_INPUT, RNODE_CHECKBOX,
     RNODE_TOGGLE, RNODE_SPINNER, RNODE_SEPARATOR, RNODE_BADGE, RNODE_CURSOR,
@@ -56,10 +68,14 @@ struct RenderTree_s {
     RenderNodeType type;
     Rect rect;
     char *style_class, *state;
+    bool state_owned;
     WidgetStyle resolved_style, prev_resolved_style;
     long long state_change_time;
     bool dirty;
+    WidgetContext *context;
     struct { char *role, *label; } accessible;
+    struct AnimInstance *active_animations;
+    int animation_count;
     union {
         struct { char *bg; BorderStyle border; EdgeInsets padding; RenderTree *children; int child_count; } container;
         struct { char *content; Alignment align; } text;
@@ -77,7 +93,7 @@ struct RenderTree_s {
         struct { int year, month, selected_day; } calendar;
         struct { FormField *fields; int field_count, focused; char *submit_label; } form;
         struct { char **tab_labels; int tab_count, active; RenderTree *child; } tabs;
-        struct { Orientation orientation; int split_position; RenderTree *first, *second; } split_panes;
+        struct { Orientation orientation; int split_position; int split_position2; RenderTree *first, *second, *third; } split_panes;
         struct { ListItem *items; int item_count, selected; } context_menu;
         struct { char *message; } toast;
     };

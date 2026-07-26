@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -Wall -Wextra -O2 -fPIC -Isrc
+CFLAGS = -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -Wall -Wextra -O2 -fPIC -Isrc -Isrc/filly-port
 PKG_DEPS = libsodium
 CFLAGS += $(shell pkg-config --cflags $(PKG_DEPS) 2>/dev/null)
-LDFLAGS = -ldl -lpthread -lm -lsodium -lcrypt -rdynamic $(shell pkg-config --libs $(PKG_DEPS) 2>/dev/null)
+LDFLAGS = -ldl -lpthread -lm -lsodium -lcrypt -rdynamic -lutil $(shell pkg-config --libs $(PKG_DEPS) 2>/dev/null)
 
 GCORE_DEPS = libdrm libinput wayland-client xkbcommon x11 libudev gbm egl
 GCORE_CFLAGS = $(shell pkg-config --cflags $(GCORE_DEPS) 2>/dev/null)
@@ -11,6 +11,7 @@ GCORE_LDFLAGS = $(shell pkg-config --libs $(GCORE_DEPS) 2>/dev/null) -lGLESv2 -l
 PREFIX = /usr/local
 
 SRCS = src/cli/main.c \
+       src/core/widget_factories.c \
        src/protocol/protocol.c \
        src/protocol/schema.c \
        src/protocol/msgpack.c \
@@ -29,6 +30,9 @@ SRCS = src/cli/main.c \
        src/core/i18n.c \
        src/core/crypto.c \
        src/core/config.c \
+       src/core/shm_ipc.c \
+       src/core/recorder.c \
+       src/core/animation.c \
        src/backend/terminal/terminal.c \
        src/backend/terminal/renderer.c \
        src/backend/headless/headless.c \
@@ -73,7 +77,10 @@ SRCS = src/cli/main.c \
        src/core/widgets/badge.c \
        src/core/widgets/rich_text.c \
        src/core/widgets/tooltip.c \
-       src/core/widgets/hub.c
+       src/core/widgets/hub.c \
+       src/core/widgets/terminal_emulator.c \
+       src/core/widgets/widget_builder.c \
+       src/core/widgets/macro_recorder.c
 
 GCORE_SRCS = src/xdg-shell.c
 
@@ -98,6 +105,8 @@ PLUGIN_GFORGE_SRCS = plugins/gforge/plugin.c \
 
 TEST_SRCS = $(filter-out src/cli/main.c, $(SRCS)) $(GCORE_SRCS)
 
+LIBFILLY_SRCS = $(filter-out src/cli/main.c src/backend/daemon/daemon.c, $(SRCS)) $(GCORE_SRCS)
+
 all: filly plugins
 
 filly: $(SRCS) $(GCORE_SRCS) src/cJSON.o
@@ -114,6 +123,9 @@ libartixforge.so: $(PLUGIN_ARTIXFORGE_SRCS)
 libgforge.so: $(PLUGIN_GFORGE_SRCS)
 	$(CC) $(CFLAGS) -shared -o $@ $^
 
+libfilly.so: $(LIBFILLY_SRCS) src/cJSON.o
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -shared -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+
 filly-test: test/test.c $(TEST_SRCS) src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
@@ -123,11 +135,52 @@ test: filly-test
 pixel-test: test/pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -o pixel-test $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
+BUILDER_SRCS = src/builder/filly_build.c \
+               src/builder/project.c \
+               src/builder/canvas.c \
+               src/builder/connection_graph.c \
+               src/builder/property_editor.c \
+               src/builder/codegen.c \
+               src/builder/validator.c
+
+filly-build: $(BUILDER_SRCS) src/core/widget.c src/core/widget_base.c \
+             src/core/widget_factories.c src/core/render.c src/core/session.c \
+             src/core/store.c src/core/theme.c src/core/arena.c src/core/undo.c \
+             src/core/clipboard.c src/core/client.c src/core/log.c src/core/config.c \
+             src/core/i18n.c src/core/shm_ipc.c src/core/recorder.c \
+             src/core/animation.c \
+             src/script/fil.c src/protocol/protocol.c src/protocol/schema.c \
+             src/backend/headless/headless.c src/backend/terminal/renderer.c \
+             src/backend/gcore/renderer.c \
+             src/core/widgets/menu.c src/core/widgets/yesno.c \
+             src/core/widgets/input.c src/core/widgets/password.c \
+             src/core/widgets/checklist.c src/core/widgets/msg.c \
+             src/core/widgets/filter.c src/core/widgets/multiselect.c \
+             src/core/widgets/file_picker.c src/core/widgets/text_editor.c \
+             src/core/widgets/summary.c src/core/widgets/progress.c \
+             src/core/widgets/toggle.c src/core/widgets/spinner.c \
+             src/core/widgets/separator.c src/core/widgets/disk.c \
+             src/core/widgets/table.c src/core/widgets/tree.c \
+             src/core/widgets/gauge.c src/core/widgets/calendar.c \
+             src/core/widgets/form.c src/core/widgets/tabs.c \
+             src/core/widgets/split_panes.c src/core/widgets/context_menu.c \
+             src/core/widgets/notification.c src/core/widgets/radio_group.c \
+             src/core/widgets/range_slider.c src/core/widgets/color_picker.c \
+             src/core/widgets/badge.c src/core/widgets/rich_text.c \
+             src/core/widgets/tooltip.c src/core/widgets/hub.c \
+             src/core/widgets/terminal_emulator.c \
+             src/core/widgets/widget_builder.c \
+             src/core/widgets/macro_recorder.c \
+             src/cJSON.o
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -Isrc/builder -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+
 install: all
 	install -Dm755 filly $(PREFIX)/bin/filly
 	mkdir -p $(HOME)/.config/filly/plugins
 	cp libartixforge.so $(HOME)/.config/filly/plugins/
 	cp libgforge.so $(HOME)/.config/filly/plugins/
+
+bindings: libfilly.so
 
 tools: tools/genkey tools/sign tools/verify
 
@@ -170,10 +223,23 @@ test-tui: filly
 test-gui: filly pixel-test
 	./test/harness_gui.sh
 
-test-all: test test-tui test-gui
-	@echo "All test suites complete"
+test-fault: test/fault_inject.c $(TEST_SRCS) src/cJSON.o
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -o test-fault $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+	./test-fault
+
+test-bench: test/benchmark.c $(TEST_SRCS) src/cJSON.o
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -o test-bench $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+	./test-bench
+
+test-all: test test-tui test-gui test-fault test-bench
+
+lint:
+	clang-tidy src/cli/main.c src/protocol/protocol.c src/protocol/schema.c src/core/render.c src/core/widget.c src/core/session.c src/core/store.c src/core/theme.c src/core/client.c src/backend/daemon/daemon.c src/backend/terminal/terminal.c src/backend/gcore/renderer.c -- $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE
+
+cppcheck:
+	cppcheck --enable=all --suppress=missingIncludeSystem --std=c99 -Isrc -Isrc/filly-port src/
 
 clean:
-	rm -f filly filly-gui src/cJSON.o libartixforge.so libgforge.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz
+	rm -f filly filly-build src/cJSON.o libartixforge.so libgforge.so libfilly.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz
 
-.PHONY: all plugins install clean test test-unit test-fuzz tools
+.PHONY: all plugins install clean test test-unit test-fuzz test-fault test-bench tools bindings lint cppcheck

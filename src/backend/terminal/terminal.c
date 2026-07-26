@@ -24,6 +24,78 @@ static int write_all(int fd, const char *buf, int len) {
     return written;
 }
 
+static const char b64_table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void base64_encode(const unsigned char *src, int len, char *dst) {
+    int i, j = 0;
+    for (i = 0; i < len; i += 3) {
+        unsigned long v = (unsigned long)src[i] << 16;
+        if (i + 1 < len) v |= (unsigned long)src[i + 1] << 8;
+        if (i + 2 < len) v |= src[i + 2];
+        dst[j++] = b64_table[(v >> 18) & 0x3F];
+        dst[j++] = b64_table[(v >> 12) & 0x3F];
+        dst[j++] = (i + 1 < len) ? b64_table[(v >> 6) & 0x3F] : '=';
+        dst[j++] = (i + 2 < len) ? b64_table[v & 0x3F] : '=';
+    }
+    dst[j] = '\0';
+}
+
+static void term_copy_to_clipboard(void *self, const char *text) {
+    TerminalBackend *t = (TerminalBackend *)self;
+    if (!text || !text[0]) return;
+    int len = strlen(text);
+    char *b64 = malloc(len * 2 + 16);
+    base64_encode((const unsigned char *)text, len, b64);
+    dprintf(t->tty_fd, "\033]52;c;%s\a", b64);
+    free(b64);
+}
+
+static char *term_paste_from_clipboard(void *self) {
+    (void)self;
+    return NULL;
+}
+
+static void term_write_diff(TerminalBackend *t, const char *new_buf, int new_len,
+                             int w, int h) {
+    if (!t->prev_buf || t->prev_w != w || t->prev_h != h) {
+        write_all(t->tty_fd, "\033[2J\033[H", 7);
+        write_all(t->tty_fd, new_buf, new_len);
+        return;
+    }
+
+    int min_h = t->prev_h < h ? t->prev_h : h;
+    int row_w = w;
+    int first_changed = -1, last_changed = -1;
+
+    for (int row = 0; row < min_h; row++) {
+        int off = row * row_w;
+        if (off + row_w > t->prev_len || off + row_w > new_len) break;
+        if (memcmp(t->prev_buf + off, new_buf + off, row_w) != 0) {
+            if (first_changed < 0) first_changed = row;
+            last_changed = row;
+        }
+    }
+
+    if (first_changed < 0) return;
+
+    for (int row = first_changed; row <= last_changed; row++) {
+        int off = row * row_w;
+        const char *prev_row = t->prev_buf + off;
+        const char *new_row = new_buf + off;
+        int start = 0;
+        while (start < row_w) {
+            while (start < row_w && prev_row[start] == new_row[start]) start++;
+            if (start >= row_w) break;
+            int end = start;
+            while (end < row_w && prev_row[end] != new_row[end]) end++;
+            dprintf(t->tty_fd, "\033[%d;%dH", row + 1, start + 1);
+            write_all(t->tty_fd, new_row + start, end - start);
+            start = end;
+        }
+    }
+}
+
 static bool term_setup(void *self) {
     TerminalBackend *t = (TerminalBackend *)self;
     if (t->session_active) return true;
@@ -40,9 +112,11 @@ static bool term_setup(void *self) {
     tcsetattr(t->tty_fd, TCSAFLUSH, &raw);
     t->raw_mode = true;
 
-    write_all(t->tty_fd, "\033[?25l", 6);
+    write_all(t->tty_fd, "\033[?2026h\033[?25l", 12);
     const char *term = getenv("TERM");
-    bool no_mouse = (term && (strncmp(term, "linux", 5) == 0 || strcmp(term, "vt100") == 0 || strcmp(term, "vt102") == 0));
+    bool no_mouse = (term && (strncmp(term, "linux", 5) == 0 ||
+                              strcmp(term, "vt100") == 0 ||
+                              strcmp(term, "vt102") == 0));
     if (!no_mouse) {
         write_all(t->tty_fd, "\033[?1000h\033[?1006h", 16);
     }
@@ -57,9 +131,25 @@ static bool term_draw(void *self, RenderTree *tree) {
     struct winsize ws;
     if (ioctl(t->tty_fd, TIOCGWINSZ, &ws) == 0) { w = ws.ws_col; h = ws.ws_row; }
     else { w = 80; h = 24; }
+
+    if (!t->prev_buf) {
+        t->prev_buf = malloc(524288);
+        t->prev_len = 0;
+    }
+
     char buf[524288];
     render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
-    write_all(t->tty_fd, buf, strlen(buf));
+    int new_len = strlen(buf);
+
+    term_write_diff(t, buf, new_len, w, h);
+
+    int copy_len = new_len < 524287 ? new_len : 524287;
+    memcpy(t->prev_buf, buf, copy_len);
+    t->prev_buf[copy_len] = '\0';
+    t->prev_len = copy_len;
+    t->prev_w = w;
+    t->prev_h = h;
+
     return true;
 }
 
@@ -221,9 +311,9 @@ static bool term_teardown(void *self) {
     }
 
     if (no_mouse) {
-        write_all(t->tty_fd, "\033[0m\033[2J\033[H\033[?25h", 15);
+        write_all(t->tty_fd, "\033[0m\033[?2026l\033[2J\033[H\033[?25h", 23);
     } else {
-        write_all(t->tty_fd, "\033[0m\033[2J\033[H\033[?25h\033[?1000l\033[?1006l", 29);
+        write_all(t->tty_fd, "\033[0m\033[?2026l\033[2J\033[H\033[?25h\033[?1000l\033[?1006l", 37);
     }
     t->session_active = false;
     return true;
@@ -236,6 +326,8 @@ BackendVTable terminal_vtable = {
     .teardown = term_teardown,
     .get_size = term_get_size,
     .wait_frame = NULL,
+    .copy_to_clipboard = term_copy_to_clipboard,
+    .paste_from_clipboard = term_paste_from_clipboard,
     .is_interactive = true,
 };
 
@@ -252,11 +344,18 @@ bool terminal_backend_init(TerminalBackend *t, const char *tty_path) {
     t->raw_mode = false;
     t->alt_screen = false;
     t->session_active = false;
+    t->tty_stream = NULL;
     t->tty_path = tty_path ? strdup(tty_path) : strdup("/dev/tty");
+    t->prev_buf = NULL;
+    t->prev_len = 0;
+    t->prev_w = 0;
+    t->prev_h = 0;
     return true;
 }
 
 void terminal_backend_destroy(TerminalBackend *t) {
+    free(t->prev_buf);
+    if (t->tty_stream) fclose(t->tty_stream);
     if (t->tty_fd >= 0) close(t->tty_fd);
     free(t->tty_path);
 }

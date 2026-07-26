@@ -15,8 +15,7 @@ EdgeInsets edgeinsets_zero(void) {
 }
 
 ListItem listitem_new(const char *label) {
-    (void)label;
-    ListItem li = { .label = NULL, .meta = NULL };
+    ListItem li = { .label = (char *)label, .meta = NULL };
     return li;
 }
 
@@ -32,7 +31,13 @@ WidgetStyle widgetstyle_default(void) {
     s.padding[0] = 8; s.padding[1] = 12; s.padding[2] = 8; s.padding[3] = 12;
     s.font_size = 14;
     s.font_weight = 400;
-    s.font_family = NULL;  /* will be filled by theme */
+    s.font_family = NULL;
+    s.opacity = 1.0f;
+    s.scale_x = 1.0f;
+    s.scale_y = 1.0f;
+    s.rotation = 0.0f;
+    s.translate_x = 0.0f;
+    s.translate_y = 0.0f;
     return s;
 }
 
@@ -54,6 +59,15 @@ void resolve_node_styles(RenderTree *node, Theme *theme) {
     if (ws->border_color == 0) ws->border_color = rgba(42, 42, 74, 255);
     if (ws->border_width == 0) ws->border_width = 1;
 
+    if (node->context) {
+        if (node->context->parent_rect.w > 0) {
+            if (ws->max_width == 0 || ws->max_width > node->context->parent_rect.w)
+                ws->max_width = node->context->parent_rect.w;
+        }
+        if (node->context->screen_width > 0 && ws->min_width == 0)
+            ws->min_width = 1;
+    }
+
     if (node->type == RNODE_CONTAINER) {
         for (int i = 0; i < node->container.child_count; i++)
             resolve_node_styles(&node->container.children[i], theme);
@@ -63,6 +77,7 @@ void resolve_node_styles(RenderTree *node, Theme *theme) {
     if (node->type == RNODE_SPLIT_PANES) {
         if (node->split_panes.first) resolve_node_styles(node->split_panes.first, theme);
         if (node->split_panes.second) resolve_node_styles(node->split_panes.second, theme);
+        if (node->split_panes.third) resolve_node_styles(node->split_panes.third, theme);
     }
 }
 
@@ -77,5 +92,4 @@ void render_tree_mark_dirty(RenderTree *tree) {
 
 void render_tree_free(RenderTree *tree) {
     (void)tree;
-    /* arena-backed: nothing to free. reset arena in session_run after each frame. */
 }

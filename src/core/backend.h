@@ -9,6 +9,8 @@ typedef struct {
     bool (*teardown)(void *self);
     void (*get_size)(void *self, int *w, int *h);
     void (*wait_frame)(void *self);
+    void (*copy_to_clipboard)(void *self, const char *text);
+    char *(*paste_from_clipboard)(void *self);
     bool is_interactive;
 } BackendVTable;
 

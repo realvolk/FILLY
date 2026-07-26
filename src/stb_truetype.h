@@ -75,7 +75,7 @@ static stbtt_uint8 stbtt__buf_get8(stbtt__buf *b) {
     if (b->cursor >= b->size) return 0;
     return b->data[b->cursor++];
 }
-static stbtt_uint32 stbtt__buf_get(stbtt__buf *b, int n) {
+__attribute__((unused)) static stbtt_uint32 stbtt__buf_get(stbtt__buf *b, int n) {
     stbtt_uint32 v = 0;
     for (int i = 0; i < n; i++) v = (v << 8) | stbtt__buf_get8(b);
     return v;
@@ -93,7 +93,7 @@ static stbtt_uint32 ttULONG(stbtt_uint8 *p)  { return (p[0]<<24) | (p[1]<<16) | 
 #define stbtt_tag4(p,c0,c1,c2,c3) ((p)[0]==(c0) && (p)[1]==(c1) && (p)[2]==(c2) && (p)[3]==(c3))
 #define stbtt_tag(p,str) stbtt_tag4(p,str[0],str[1],str[2],str[3])
 
-static int stbtt__isfont(stbtt_uint8 *font) {
+__attribute__((unused)) static int stbtt__isfont(stbtt_uint8 *font) {
     if (stbtt_tag4(font,'1',0,0,0)) return 1;
     if (stbtt_tag(font,"true"))    return 1;
     if (stbtt_tag4(font,0,1,0,0)) return 1;
@@ -383,13 +383,12 @@ static stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, 
     *num_contours = n;
     if (n == 0) { *contour_lengths = NULL; return NULL; }
     *contour_lengths = (int *)STBTT_malloc(sizeof(int) * n, userdata);
+    if (!*contour_lengths) return NULL;
     float objspace_flatness_squared = objspace_flatness * objspace_flatness;
     int num_points = 0;
     /* first pass: count */
-    for (int pass = 0; pass < 2; pass++) {
+    {
         float x = 0, y = 0;
-        stbtt__point *points = NULL;
-        if (pass == 1) points = (stbtt__point *)STBTT_malloc(num_points * sizeof(stbtt__point), userdata);
         num_points = 0; n = -1;
         int start = 0;
         for (int i = 0; i < num_verts; i++) {
@@ -397,6 +396,31 @@ static stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, 
                 case STBTT_vmove:
                     if (n >= 0) (*contour_lengths)[n] = num_points - start;
                     n++; start = num_points;
+                    x = vertices[i].x; y = vertices[i].y;
+                    num_points++;
+                    break;
+                case STBTT_vline:
+                    x = vertices[i].x; y = vertices[i].y;
+                    num_points++;
+                    break;
+                case STBTT_vcurve:
+                    stbtt__tesselate_curve(NULL, &num_points, x, y, vertices[i].cx, vertices[i].cy, vertices[i].x, vertices[i].y, objspace_flatness_squared, 0);
+                    x = vertices[i].x; y = vertices[i].y;
+                    break;
+            }
+        }
+        if (n >= 0) (*contour_lengths)[n] = num_points - start;
+    }
+    /* second pass: allocate and fill */
+    stbtt__point *points = (stbtt__point *)STBTT_malloc(num_points * sizeof(stbtt__point), userdata);
+    if (!points) return NULL;
+    {
+        float x = 0, y = 0;
+        num_points = 0; n = -1;
+        for (int i = 0; i < num_verts; i++) {
+            switch (vertices[i].type) {
+                case STBTT_vmove:
+                    n++;
                     x = vertices[i].x; y = vertices[i].y;
                     stbtt__add_point(points, num_points++, x, y);
                     break;
@@ -410,9 +434,8 @@ static stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, 
                     break;
             }
         }
-        if (n >= 0) (*contour_lengths)[n] = num_points - start;
     }
-    return (stbtt__point *)STBTT_malloc(num_points * sizeof(stbtt__point), userdata);
+    return points;
 }
 
 /* ---------------------------------------------------------------------------
@@ -522,6 +545,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
     int y = off_y;
     e[n].y0 = (float)(off_y + result->h) + 1;
     float *scanline = (float *)STBTT_malloc((result->w*2+1)*sizeof(float), userdata);
+    if (!scanline) return;
     float *scanline2 = scanline + result->w;
 
     for (int j = 0; j < result->h; j++) {
@@ -572,6 +596,7 @@ static void stbtt__rasterize(stbtt__bitmap *result, stbtt__point *pts, int *wcou
     float y_scale_inv = invert ? -scale_y : scale_y;
     int n = 0;
     for (int i = 0; i < windings; i++) n += wcount[i];
+    if (n == 0) return;
     stbtt__edge *e = (stbtt__edge *)STBTT_malloc(sizeof(*e)*(n+1), userdata);
     if (!e) return;
     n = 0;
@@ -595,6 +620,7 @@ static void stbtt__rasterize(stbtt__bitmap *result, stbtt__point *pts, int *wcou
 }
 
 static void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, stbtt_vertex *vertices, int num_verts, float scale_x, float scale_y, float shift_x, float shift_y, int x_off, int y_off, int invert, void *userdata) {
+    if (num_verts <= 0) return;
     float scale = scale_x > scale_y ? scale_y : scale_x;
     int winding_count, *winding_lengths;
     stbtt__point *windings = stbtt_FlattenCurves(vertices, num_verts, flatness_in_pixels/scale, &winding_lengths, &winding_count, userdata);
@@ -611,21 +637,41 @@ static void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, stb
 void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata) { STBTT_free(bitmap, userdata); }
 
 unsigned char *stbtt_GetCodepointBitmap(const stbtt_fontinfo *info, float scale_x, float scale_y, int codepoint, int *width, int *height, int *xoff, int *yoff) {
+    int glyph_index = stbtt_FindGlyphIndex(info, codepoint);
+    if (glyph_index == 0) {
+        if (width) { *width = 0; }
+        if (height) { *height = 0; }
+        if (xoff) { *xoff = 0; }
+        if (yoff) { *yoff = 0; }
+        return NULL;
+    }
+    
     stbtt_vertex *vertices;
-    int num_verts = stbtt_GetGlyphShape(info, stbtt_FindGlyphIndex(info, codepoint), &vertices);
-    if (!num_verts) { *width = *height = 0; *xoff = *yoff = 0; return NULL; }
+    int num_verts = stbtt_GetGlyphShape(info, glyph_index, &vertices);
+    if (!num_verts) {
+        if (width) { *width = 0; }
+        if (height) { *height = 0; }
+        if (xoff) { *xoff = 0; }
+        if (yoff) { *yoff = 0; }
+        return NULL;
+    }
 
     int x0, y0, x1, y1;
-    if (!stbtt_GetGlyphBox(info, stbtt_FindGlyphIndex(info, codepoint), &x0, &y0, &x1, &y1)) {
+    if (!stbtt_GetGlyphBox(info, glyph_index, &x0, &y0, &x1, &y1)) {
         STBTT_free(vertices, info->userdata);
-        *width = *height = 0; return NULL;
+        if (width) { *width = 0; }
+        if (height) { *height = 0; }
+        return NULL;
     }
 
     int ix0 = STBTT_ifloor(x0*scale_x), iy0 = STBTT_ifloor(-y1*scale_y);
     int ix1 = STBTT_iceil(x1*scale_x),  iy1 = STBTT_iceil(-y0*scale_y);
 
     int w = ix1 - ix0, h = iy1 - iy0;
-    *width = w; *height = h; *xoff = ix0; *yoff = iy0;
+    if (width) { *width = w; }
+    if (height) { *height = h; }
+    if (xoff) { *xoff = ix0; }
+    if (yoff) { *yoff = iy0; }
 
     if (w <= 0 || h <= 0) { STBTT_free(vertices, info->userdata); return NULL; }
 

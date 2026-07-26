@@ -22,9 +22,17 @@ struct Widget_s {
     WidgetVTable vtable;
 };
 
+typedef enum { P_STR, P_INT, P_BOOL, P_JSON, P_STRS } ParamType;
+typedef struct { const char *name; ParamType type; const char *def_str; int def_int; } ParamDesc;
+
 EventResult event_result_handled(void);
 EventResult event_result_response(WidgetResponse resp);
 EventResult event_result_unhandled(void);
 void widget_registry_register(const char *name, WidgetFactory factory);
+void widget_registry_register_plugin(const char *name, WidgetFactory factory);
+void widget_registry_clear_plugins(void);
 Widget *widget_registry_create(const WidgetRequest *req);
 void widget_destroy(Widget *w);
+bool widget_registry_enum(int *idx, const char **name, WidgetFactory *factory);
+int widget_registry_count(void);
+const ParamDesc *widget_get_params(const char *widget_type, int *count);
