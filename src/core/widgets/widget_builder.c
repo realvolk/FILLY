@@ -1,4 +1,3 @@
-/* ===== src/core/widgets/widget_builder.c ===== */
 #include "widget_builder.h"
 #include "core/widget_base.h"
 #include "core/session.h"
