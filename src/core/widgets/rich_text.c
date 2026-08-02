@@ -5,12 +5,14 @@
 
 typedef struct { WidgetBase base; char *content; } RichTextData;
 
-static void rich_text_render(Widget *self, Rect area, RenderTree *out) {
+static void rich_text_render(Widget *self, RenderTree *out) {
     RichTextData *d = (RichTextData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->type = RNODE_TEXT;
     out->rect = area;
-    out->text.content = d->content;
+    out->u.text.content = d->content;
     out->style_class = "text";
 }
 

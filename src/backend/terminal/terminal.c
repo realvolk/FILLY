@@ -56,6 +56,7 @@ static char *term_paste_from_clipboard(void *self) {
     return NULL;
 }
 
+#if 0
 static void term_write_diff(TerminalBackend *t, const char *new_buf, int new_len,
                              int w, int h) {
     if (!t->prev_buf || t->prev_w != w || t->prev_h != h) {
@@ -95,6 +96,7 @@ static void term_write_diff(TerminalBackend *t, const char *new_buf, int new_len
         }
     }
 }
+#endif
 
 static bool term_setup(void *self) {
     TerminalBackend *t = (TerminalBackend *)self;
@@ -132,23 +134,12 @@ static bool term_draw(void *self, RenderTree *tree) {
     if (ioctl(t->tty_fd, TIOCGWINSZ, &ws) == 0) { w = ws.ws_col; h = ws.ws_row; }
     else { w = 80; h = 24; }
 
-    if (!t->prev_buf) {
-        t->prev_buf = malloc(524288);
-        t->prev_len = 0;
-    }
-
     char buf[524288];
     render_tree_to_buf(tree, 0, 0, w, h, buf, sizeof(buf));
     int new_len = strlen(buf);
 
-    term_write_diff(t, buf, new_len, w, h);
-
-    int copy_len = new_len < 524287 ? new_len : 524287;
-    memcpy(t->prev_buf, buf, copy_len);
-    t->prev_buf[copy_len] = '\0';
-    t->prev_len = copy_len;
-    t->prev_w = w;
-    t->prev_h = h;
+    write_all(t->tty_fd, "\033[2J\033[H", 7);
+    write_all(t->tty_fd, buf, new_len);
 
     return true;
 }

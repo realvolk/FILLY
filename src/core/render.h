@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 struct Arena;
-typedef struct Theme_s Theme;
+struct Theme_s;
 struct AnimInstance;
 
 typedef struct { int x, y, w, h; } Rect;
@@ -96,7 +96,7 @@ struct RenderTree_s {
         struct { Orientation orientation; int split_position; int split_position2; RenderTree *first, *second, *third; } split_panes;
         struct { ListItem *items; int item_count, selected; } context_menu;
         struct { char *message; } toast;
-    };
+    } u;
 };
 
 static inline uint32_t rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) { return (a<<24)|(r<<16)|(g<<8)|b; }
@@ -105,6 +105,7 @@ Rect rect_new(int x, int y, int w, int h);
 EdgeInsets edgeinsets_zero(void);
 ListItem listitem_new(const char *label);
 WidgetStyle widgetstyle_default(void);
-void resolve_node_styles(RenderTree *tree, Theme *theme);
+void resolve_node_styles(RenderTree *tree, struct Theme_s *theme);
 void render_tree_mark_dirty(RenderTree *tree);
 void render_tree_free(RenderTree *tree);
+void layout_tree(RenderTree *tree, int surface_w, int surface_h, bool is_pixel);

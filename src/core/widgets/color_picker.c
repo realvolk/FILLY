@@ -8,65 +8,77 @@
 typedef struct { WidgetBase base; char *title; int r, g, b, channel; } ColorPickerData;
 extern Arena *g_session_arena;
 
-static void cp_render(Widget *self, Rect area, RenderTree *out) {
+static void cp_render(Widget *self, RenderTree *out) {
     ColorPickerData *d = (ColorPickerData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
-    int box_w = 50, box_h = 11;
-    if (box_w > area.w - 2) box_w = area.w - 2;
-    if (box_h > area.h - 2) box_h = area.h - 2;
+    int is_gui = (area.w > 200);
+    int ch = is_gui ? 30 : 1;
+    int box_w = is_gui ? 560 : 50;
+    int box_h = is_gui ? 300 : 11;
+    if (box_w > area.w - (is_gui ? 4 : 2)) box_w = area.w - (is_gui ? 4 : 2);
+    if (box_h > area.h - (is_gui ? 4 : 2)) box_h = area.h - (is_gui ? 4 : 2);
+    
     RenderTree *children = arena_alloc(g_session_arena, 8 * sizeof(RenderTree));
+    
     children[0].type = RNODE_TEXT;
-    children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena, d->title);
+    children[0].rect = rect_new(ch, 0, box_w - 2*ch, ch);
+    children[0].u.text.content = arena_strdup(g_session_arena, d->title);
     children[0].style_class = "text";
     children[0].state = "title";
+    
     children[1].type = RNODE_TEXT;
-    children[1].rect = rect_new(1, 1, box_w - 2, 1);
+    children[1].rect = rect_new(ch, ch, box_w - 2*ch, ch);
     char hex[16];
     snprintf(hex, sizeof(hex), "#%02X%02X%02X", d->r, d->g, d->b);
-    children[1].text.content = arena_strdup(g_session_arena, hex);
+    children[1].u.text.content = arena_strdup(g_session_arena, hex);
     children[1].style_class = "text";
+    
     children[2].type = RNODE_TEXT;
-    children[2].rect = rect_new(1, 2, box_w - 2, 1);
-    int preview_len = box_w - 4;
-    if (preview_len > 48) preview_len = 48;
+    children[2].rect = rect_new(ch, 2*ch, box_w - 2*ch, ch);
+    int preview_len = is_gui ? 20 : (box_w - 4 > 48 ? 48 : box_w - 4);
     if (preview_len < 0) preview_len = 0;
     char *preview = arena_alloc(g_session_arena, preview_len + 1);
     memset(preview, '#', preview_len);
     preview[preview_len] = '\0';
-    children[2].text.content = preview;
+    children[2].u.text.content = preview;
     children[2].style_class = "text";
+    
     const char *channels[] = {"R","G","B"};
     int vals[] = {d->r, d->g, d->b};
     for (int i = 0; i < 3; i++) {
-        int y = 4 + i;
+        int y = (4 + i) * ch;
         children[3 + i].type = RNODE_TEXT;
-        children[3 + i].rect = rect_new(1, y, box_w - 2, 1);
+        children[3 + i].rect = rect_new(ch, y, box_w - 2*ch, ch);
         char line[128];
-        int bar_w = box_w - 20;
+        int bar_w = is_gui ? 40 : (box_w - 20);
         int filled = (int)((float)vals[i] / 255 * bar_w);
         char bar[128] = {0};
         for (int j = 0; j < filled; j++) bar[j] = '#';
         for (int j = filled; j < bar_w; j++) bar[j] = '.';
         snprintf(line, sizeof(line), "%s %s %3d %s", i == d->channel ? ">" : " ", channels[i], vals[i], bar);
-        children[3 + i].text.content = arena_strdup(g_session_arena, line);
+        children[3 + i].u.text.content = arena_strdup(g_session_arena, line);
         children[3 + i].style_class = "text";
     }
+    
     children[6].type = RNODE_TEXT;
-    children[6].rect = rect_new(1, 8, box_w - 2, 1);
-    children[6].text.content = "Up/Down:channel  Left/Right:-/+  Enter:confirm  Esc:cancel";
+    children[6].rect = rect_new(ch, 8*ch, box_w - 2*ch, ch);
+    children[6].u.text.content = "Up/Down:channel  Left/Right:-/+  Enter:confirm  Esc:cancel";
     children[6].style_class = "text";
     children[6].state = "muted";
+    
     children[7].type = RNODE_TEXT;
-    children[7].rect = rect_new(1, 9, box_w - 2, 1);
-    children[7].text.content = "";
+    children[7].rect = rect_new(ch, 9*ch, box_w - 2*ch, ch);
+    children[7].u.text.content = "";
+    
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 8;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 8;
 }
 
 static EventResult cp_handle_event(Widget *self, Event *ev, Backend *backend) {

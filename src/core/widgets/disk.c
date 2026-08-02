@@ -13,43 +13,82 @@ typedef enum { DMODE_MAIN, DMODE_CONFIRM, DMODE_RESIZE_INPUT, DMODE_NEW_PARTITIO
 typedef struct { WidgetBase base; char *title, *disk, *input; Partition *partitions; int part_count; FreeSpace *free_space; int free_count, selected; bool readonly; DiskMode mode; int editing_idx; } DiskData;
 extern Arena *g_session_arena;
 
+static int str_case_eq(const char *a, const char *b) {
+    while (*a && *b) {
+        char ca = *a >= 'A' && *a <= 'Z' ? *a + 32 : *a;
+        char cb = *b >= 'A' && *b <= 'Z' ? *b + 32 : *b;
+        if (ca != cb) return 0;
+        a++; b++;
+    }
+    return *a == *b;
+}
+
 static long long human_to_bytes(const char *s) {
     char buf[64]; strncpy(buf, s, sizeof(buf)-1); buf[sizeof(buf)-1]='\0';
     char *num_end = buf; while (*num_end && (isdigit(*num_end)||*num_end=='.'||*num_end=='-')) num_end++;
     double num = atof(buf); char *suffix = num_end; while (*suffix==' ') suffix++;
-    if (strcasecmp(suffix,"B")==0) return (long long)num;
-    if (strcasecmp(suffix,"K")==0||strcasecmp(suffix,"KB")==0||strcasecmp(suffix,"KIB")==0) return (long long)(num*1024);
-    if (strcasecmp(suffix,"M")==0||strcasecmp(suffix,"MB")==0||strcasecmp(suffix,"MIB")==0) return (long long)(num*1024*1024);
-    if (strcasecmp(suffix,"G")==0||strcasecmp(suffix,"GB")==0||strcasecmp(suffix,"GIB")==0) return (long long)(num*1024*1024*1024);
-    if (strcasecmp(suffix,"T")==0||strcasecmp(suffix,"TB")==0||strcasecmp(suffix,"TIB")==0) return (long long)(num*1024*1024*1024*1024);
+    if (str_case_eq(suffix,"B")) return (long long)num;
+    if (str_case_eq(suffix,"K")||str_case_eq(suffix,"KB")||str_case_eq(suffix,"KIB")) return (long long)(num*1024);
+    if (str_case_eq(suffix,"M")||str_case_eq(suffix,"MB")||str_case_eq(suffix,"MIB")) return (long long)(num*1024*1024);
+    if (str_case_eq(suffix,"G")||str_case_eq(suffix,"GB")||str_case_eq(suffix,"GIB")) return (long long)(num*1024*1024*1024);
+    if (str_case_eq(suffix,"T")||str_case_eq(suffix,"TB")||str_case_eq(suffix,"TIB")) return (long long)(num*1024*1024*1024*1024);
     return (long long)num;
 }
 
-static void disk_render(Widget *self, Rect area, RenderTree *out) {
+static void disk_render(Widget *self, RenderTree *out) {
     DiskData *d = (DiskData *)(self + 1);
-    memset(out, 0, sizeof(*out)); out->style_class = "container";
-    int box_w = (int)(area.w * 0.95f); if (box_w > area.w - 2) box_w = area.w - 2;
-    int box_h = (int)(area.h * 0.95f); if (box_h > area.h - 2) box_h = area.h - 2;
-    RenderTree *children = arena_alloc(g_session_arena, 4 * sizeof(RenderTree));
-    children[0].type = RNODE_TEXT; children[0].rect = rect_new(1, 1, box_w - 2, 1);
-    char title_buf[256]; snprintf(title_buf, sizeof(title_buf), "%s (%s)", d->title, d->disk);
-    children[0].text.content = arena_strdup(g_session_arena, title_buf); children[0].style_class = "text"; children[0].state = "title";
+    memset(out, 0, sizeof(*out));
+    out->type = RNODE_CONTAINER;
+    out->style_class = "container";
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+
     int total = d->part_count + d->free_count;
-    children[1].type = RNODE_LIST; children[1].rect = rect_new(1, 2, box_w - 2, box_h - 5);
-    children[1].list.item_count = total; children[1].list.selected = d->selected;
-    children[1].list.items = arena_alloc(g_session_arena, total * sizeof(ListItem));
-    for (int i = 0; i < d->part_count; i++) { char label[256]; snprintf(label, sizeof(label), "%s%3d  %8s  %-22s", i==d->selected?">":" ", d->partitions[i].number, d->partitions[i].size, d->partitions[i].ptype); children[1].list.items[i].label = arena_strdup(g_session_arena, label); }
-    for (int i = 0; i < d->free_count; i++) { int sel = d->part_count + i; char label[256]; snprintf(label, sizeof(label), "%s     %8s  Free space", sel==d->selected?">":" ", d->free_space[i].size); children[1].list.items[d->part_count+i].label = arena_strdup(g_session_arena, label); }
+    RenderTree *children = arena_alloc(g_session_arena, 4 * sizeof(RenderTree));
+    
+    children[0].type = RNODE_TEXT;
+    children[0].style_class = "text";
+    children[0].state = "title";
+    char title_buf[256];
+    snprintf(title_buf, sizeof(title_buf), "%s (%s)", d->title, d->disk);
+    children[0].u.text.content = arena_strdup(g_session_arena, title_buf);
+    children[0].u.text.align = ALIGN_LEFT;
+
+    children[1].type = RNODE_LIST;
     children[1].style_class = "list";
-    children[2].type = RNODE_TEXT; children[2].rect = rect_new(1, box_h - 3, box_w - 2, 1);
-    if (d->selected < d->part_count && d->mode == DMODE_MAIN) { Partition *p = &d->partitions[d->selected]; char detail[256]; snprintf(detail, sizeof(detail), "Partition %d  Type: %s  Size: %s  FS: %s", p->number, p->ptype, p->size, p->fs_signature?p->fs_signature:"none"); children[2].text.content = arena_strdup(g_session_arena, detail); } else { children[2].text.content = ""; }
+    children[1].u.list.item_count = total;
+    children[1].u.list.selected = d->selected;
+    children[1].u.list.items = arena_alloc(g_session_arena, total * sizeof(ListItem));
+    for (int i = 0; i < d->part_count; i++) {
+        char label[256];
+        snprintf(label, sizeof(label), "%s%3d  %8s  %-22s", i==d->selected?">":" ", d->partitions[i].number, d->partitions[i].size, d->partitions[i].ptype);
+        children[1].u.list.items[i].label = arena_strdup(g_session_arena, label);
+    }
+    for (int i = 0; i < d->free_count; i++) {
+        int sel = d->part_count + i;
+        char label[256];
+        snprintf(label, sizeof(label), "%s     %8s  Free space", sel==d->selected?">":" ", d->free_space[i].size);
+        children[1].u.list.items[d->part_count + i].label = arena_strdup(g_session_arena, label);
+    }
+
+    children[2].type = RNODE_TEXT;
     children[2].style_class = "text";
-    children[3].type = RNODE_TEXT; children[3].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[3].text.content = d->readonly ? "Up/Down:move  Q:quit  Esc:cancel" : "Up/Down:move  N:new  D:delete  R:resize  W:write  Q:quit  Esc:cancel";
-    children[3].style_class = "text"; children[3].state = "muted";
-    out->type = RNODE_CONTAINER; out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = 4;
+    if (d->selected < d->part_count && d->mode == DMODE_MAIN) {
+        Partition *p = &d->partitions[d->selected];
+        char detail[256];
+        snprintf(detail, sizeof(detail), "Partition %d  Type: %s  Size: %s  FS: %s", p->number, p->ptype, p->size, p->fs_signature?p->fs_signature:"none");
+        children[2].u.text.content = arena_strdup(g_session_arena, detail);
+    } else {
+        children[2].u.text.content = "";
+    }
+
+    children[3].type = RNODE_TEXT;
+    children[3].style_class = "text";
+    children[3].state = "muted";
+    children[3].u.text.content = d->readonly ? "Up/Down:move  Q:quit  Esc:cancel" : "Up/Down:move  N:new  D:delete  R:resize  W:write  Q:quit  Esc:cancel";
+
+    out->u.container.children = children;
+    out->u.container.child_count = 4;
 }
 
 static EventResult disk_handle_event(Widget *self, Event *ev, Backend *backend) {

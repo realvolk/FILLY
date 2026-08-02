@@ -8,8 +8,10 @@
 typedef struct { WidgetBase base; char *title, *label; int min, max, value; } RangeSliderData;
 extern Arena *g_session_arena;
 
-static void rs_render(Widget *self, Rect area, RenderTree *out) {
+static void rs_render(Widget *self, RenderTree *out) {
     RangeSliderData *d = (RangeSliderData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = 50, box_h = 7;
@@ -18,7 +20,7 @@ static void rs_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 4 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena, d->title);
+    children[0].u.text.content = arena_strdup(g_session_arena, d->title);
     children[0].style_class = "text";
     children[0].state = "title";
     int range = d->max - d->min;
@@ -32,26 +34,26 @@ static void rs_render(Widget *self, Rect area, RenderTree *out) {
     bar[bar_w] = '\0';
     children[1].type = RNODE_TEXT;
     children[1].rect = rect_new(1, 2, box_w - 2, 1);
-    children[1].text.content = bar;
+    children[1].u.text.content = bar;
     children[1].style_class = "text";
     children[2].type = RNODE_TEXT;
     children[2].rect = rect_new(1, 4, box_w - 2, 1);
     char label[128];
     int pct = range == 0 ? 100 : (int)((float)(d->value - d->min) / range * 100);
     snprintf(label, sizeof(label), "%s: %d (%d%%)", d->label, d->value, pct);
-    children[2].text.content = arena_strdup(g_session_arena, label);
+    children[2].u.text.content = arena_strdup(g_session_arena, label);
     children[2].style_class = "text";
     children[3].type = RNODE_TEXT;
     children[3].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[3].text.content = "Left/Right:adjust  Enter:confirm  Esc:cancel";
+    children[3].u.text.content = "Left/Right:adjust  Enter:confirm  Esc:cancel";
     children[3].style_class = "text";
     children[3].state = "muted";
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 4;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 4;
 }
 
 static EventResult rs_handle_event(Widget *self, Event *ev, Backend *backend) {

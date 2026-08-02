@@ -8,8 +8,10 @@
 typedef struct { WidgetBase base; char *title, *message, **choices; int count, selected; } RadioGroupData;
 extern Arena *g_session_arena;
 
-static void radio_group_render(Widget *self, Rect area, RenderTree *out) {
+static void radio_group_render(Widget *self, RenderTree *out) {
     RadioGroupData *d = (RadioGroupData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.5f);
@@ -23,7 +25,7 @@ static void radio_group_render(Widget *self, Rect area, RenderTree *out) {
     if (d->title && strlen(d->title)) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-        children[idx].text.content = arena_strdup(g_session_arena, d->title);
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->title);
         children[idx].style_class = "text";
         children[idx].state = "title";
         idx++;
@@ -31,35 +33,35 @@ static void radio_group_render(Widget *self, Rect area, RenderTree *out) {
     if (d->message && strlen(d->message)) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 1, box_w - 2, 2);
-        children[idx].text.content = arena_strdup(g_session_arena, d->message);
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->message);
         children[idx].style_class = "text";
         idx++;
         list_y = 3;
     }
     children[idx].type = RNODE_LIST;
     children[idx].rect = rect_new(1, list_y, box_w - 2, box_h - list_y - 2);
-    children[idx].list.item_count = d->count;
-    children[idx].list.selected = d->selected;
-    children[idx].list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
+    children[idx].u.list.item_count = d->count;
+    children[idx].u.list.selected = d->selected;
+    children[idx].u.list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
     for (int i = 0; i < d->count; i++) {
         char label[512];
         snprintf(label, sizeof(label), " %s %s", i == d->selected ? "(●)" : "( )", d->choices[i]);
-        children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
+        children[idx].u.list.items[i].label = arena_strdup(g_session_arena, label);
     }
     children[idx].style_class = "list";
     idx++;
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[idx].text.content = "Up/Down:move  Enter:select  Esc:cancel";
+    children[idx].u.text.content = "Up/Down:move  Enter:select  Esc:cancel";
     children[idx].style_class = "text";
     children[idx].state = "muted";
     idx++;
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = idx;
 }
 
 static EventResult radio_group_handle_event(Widget *self, Event *ev, Backend *backend) {

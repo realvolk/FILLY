@@ -28,8 +28,10 @@ typedef struct {
 
 extern Arena *g_session_arena;
 
-static void md_render(Widget *self, Rect area, RenderTree *out) {
+static void md_render(Widget *self, RenderTree *out) {
     MigDEData *d = (MigDEData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.55f), box_h = (int)(area.h * 0.55f);
@@ -42,7 +44,7 @@ static void md_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 7 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena, d->title);
+    children[0].u.text.content = arena_strdup(g_session_arena, d->title);
     children[0].style_class = "text"; children[0].state = "title";
 
     for (int i = 0; i < 6; i++) {
@@ -50,16 +52,16 @@ static void md_render(Widget *self, Rect area, RenderTree *out) {
         children[1 + i].rect = rect_new(1, 1 + i, box_w - 2, 1);
         char buf[256];
         snprintf(buf, sizeof(buf), "%s %s: %s", d->field == i ? ">" : " ", labels[i], values[i]);
-        children[1 + i].text.content = arena_strdup(g_session_arena, buf);
+        children[1 + i].u.text.content = arena_strdup(g_session_arena, buf);
         children[1 + i].style_class = "text";
     }
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 7;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 7;
 }
 
 static EventResult md_handle(Widget *self, Event *ev, Backend *backend) {

@@ -8,6 +8,14 @@
 #include <fcntl.h>
 #include "wayland-clipboard.h"
 
+#ifdef __linux__
+#include <sys/mman.h>
+#include <linux/memfd.h>
+#define MEMFD_CREATE memfd_create
+#else
+#define MEMFD_CREATE(name, flags) shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600)
+#endif
+
 typedef struct {
     struct wl_display *display;
     struct wl_registry *registry;
@@ -46,15 +54,16 @@ static int create_shm_buffer(WaylandData *w, int width, int height) {
     if (w->buffer) { wl_buffer_destroy(w->buffer); w->buffer = NULL; }
     if (w->pool) { wl_shm_pool_destroy(w->pool); w->pool = NULL; }
     if (w->shm_data) { munmap(w->shm_data, w->shm_size); w->shm_data = NULL; }
-    int fd = memfd_create("filly-wayland-shm", 0);
+    int fd = shm_open("/filly-wayland-shm", O_RDWR | O_CREAT | O_EXCL, 0600);
     if (fd < 0) return -1;
-    if (ftruncate(fd, size) < 0) { close(fd); return -1; }
+    if (ftruncate(fd, size) < 0) { close(fd); shm_unlink("/filly-wayland-shm"); return -1; }
     w->shm_data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (w->shm_data == MAP_FAILED) { close(fd); return -1; }
+    if (w->shm_data == MAP_FAILED) { close(fd); shm_unlink("/filly-wayland-shm"); return -1; }
     w->shm_size = size;
     w->pool = wl_shm_create_pool(w->shm, fd, size);
-    w->buffer = wl_shm_pool_create_buffer(w->pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
+    w->buffer = wl_shm_pool_create_buffer(w->pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888);
     close(fd);
+    shm_unlink("/filly-wayland-shm");
     return 0;
 }
 
@@ -81,10 +90,9 @@ static void wl_registry_global(void *data, struct wl_registry *r, uint32_t name,
     else if (strcmp(iface, wl_seat_interface.name) == 0) { w->seat = wl_registry_bind(r, name, &wl_seat_interface, 5); wl_seat_add_listener(w->seat, &seat_listener, w); }
     else if (strcmp(iface, "wl_data_device_manager") == 0) {
         GCoreBackend *g = w->backend;
-        if (!g->wl_clipboard) {
-            g->wl_clipboard = wayland_clipboard_create(w->display, w->seat);
+        if (g->wl_clipboard) {
+            wayland_clipboard_bind_manager(g->wl_clipboard, r, name);
         }
-        wayland_clipboard_bind_manager(g->wl_clipboard, r, name);
     }
 }
 static void wl_registry_global_remove(void *data, struct wl_registry *r, uint32_t name) { (void)data; (void)r; (void)name; }
@@ -107,14 +115,24 @@ static void wl_xdg_toplevel_configure(void *data, struct xdg_toplevel *t, int32_
             wd->backend->pb.pixels = wd->shm_data;
             wd->backend->pb.width = w;
             wd->backend->pb.height = h;
+            wd->backend->pb.stride = w;
         }
     }
     wd->configured = true;
 }
+
 static void wl_xdg_toplevel_close(void *data, struct xdg_toplevel *t) { (void)t; ((WaylandData *)data)->running = false; }
+static void wl_xdg_toplevel_configure_bounds(void *d, struct xdg_toplevel *t, int32_t w, int32_t h) {
+    (void)d; (void)t; (void)w; (void)h;
+}
+static void wl_xdg_toplevel_wm_capabilities(void *d, struct xdg_toplevel *t, struct wl_array *c) {
+    (void)d; (void)t; (void)c;
+}
 static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     .configure = wl_xdg_toplevel_configure,
     .close = wl_xdg_toplevel_close,
+    .configure_bounds = wl_xdg_toplevel_configure_bounds,
+    .wm_capabilities = wl_xdg_toplevel_wm_capabilities,
 };
 
 static void wl_pointer_enter(void *d, struct wl_pointer *p, uint32_t s, struct wl_surface *sf, wl_fixed_t sx, wl_fixed_t sy) {
@@ -180,41 +198,77 @@ int setup_wayland(GCoreBackend *g) {
     w->registry = wl_display_get_registry(w->display);
     wl_registry_add_listener(w->registry, &registry_listener, w);
     wl_display_roundtrip(w->display);
-    if (!w->compositor || !w->shm || !w->wm_base) { wl_display_disconnect(w->display); free(w); return -1; }
+    
+    if (w->seat) {
+        g->wl_clipboard = wayland_clipboard_create(w->display, w->seat);
+    }
+    
+    if (!w->compositor || !w->shm || !w->wm_base) {
+        if (w->compositor) wl_compositor_destroy(w->compositor);
+        if (w->shm) wl_shm_destroy(w->shm);
+        if (w->wm_base) xdg_wm_base_destroy(w->wm_base);
+        wl_display_disconnect(w->display);
+        free(w);
+        return -1;
+    }
+    
     xdg_wm_base_add_listener(w->wm_base, &wm_base_listener, w);
     w->surface = wl_compositor_create_surface(w->compositor);
+    if (!w->surface) { wl_display_disconnect(w->display); free(w); return -1; }
+    
     w->xdg_surface = xdg_wm_base_get_xdg_surface(w->wm_base, w->surface);
+    if (!w->xdg_surface) { wl_surface_destroy(w->surface); wl_display_disconnect(w->display); free(w); return -1; }
+    
     xdg_surface_add_listener(w->xdg_surface, &xdg_surface_listener, w);
     w->xdg_toplevel = xdg_surface_get_toplevel(w->xdg_surface);
+    if (!w->xdg_toplevel) { xdg_surface_destroy(w->xdg_surface); wl_surface_destroy(w->surface); wl_display_disconnect(w->display); free(w); return -1; }
+    
     xdg_toplevel_add_listener(w->xdg_toplevel, &xdg_toplevel_listener, w);
     xdg_toplevel_set_title(w->xdg_toplevel, "FILLY");
     xdg_toplevel_set_app_id(w->xdg_toplevel, "dev.filly.gui");
     xdg_toplevel_set_min_size(w->xdg_toplevel, 100, 100);
+    
     if (w->decoration_manager) {
         w->decoration = zxdg_decoration_manager_v1_get_toplevel_decoration(w->decoration_manager, w->xdg_toplevel);
         zxdg_toplevel_decoration_v1_set_mode(w->decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
+    
     w->configured = false;
     w->width = 800; w->height = 600;
     wl_surface_commit(w->surface);
     wl_display_roundtrip(w->display);
     wl_display_roundtrip(w->display);
-    if (!w->configured) { wl_display_disconnect(w->display); free(w); return -1; }
+    
+    if (!w->configured) {
+        if (w->decoration) zxdg_toplevel_decoration_v1_destroy(w->decoration);
+        if (w->decoration_manager) zxdg_decoration_manager_v1_destroy(w->decoration_manager);
+        xdg_toplevel_destroy(w->xdg_toplevel);
+        xdg_surface_destroy(w->xdg_surface);
+        wl_surface_destroy(w->surface);
+        wl_display_disconnect(w->display);
+        free(w);
+        return -1;
+    }
+    
     create_shm_buffer(w, w->width, w->height);
     g->pb.pixels = w->shm_data;
     g->pb.width = w->width;
     g->pb.height = w->height;
+    g->pb.stride = w->width;
+    
     for (int row = 0; row < g->pb.height; row++) {
         uint32_t *line = g->pb.pixels + row * g->pb.width;
         for (int col = 0; col < g->pb.width; col++)
             line[col] = 0xFF1a1a2e;
     }
+    
     xdg_surface_set_window_geometry(w->xdg_surface, 0, 0, w->width, w->height);
     wl_surface_attach(w->surface, w->buffer, 0, 0);
     wl_surface_damage(w->surface, 0, 0, w->width, w->height);
     wl_surface_commit(w->surface);
     wl_display_flush(w->display);
     wl_display_roundtrip(w->display);
+    
     w->running = true;
     g->li_data = w;
     g->drm_data = NULL;

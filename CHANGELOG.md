@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.1 (2026-08-02) — FILLY
+
+### Changed
+- **Widget render API rewritten** — all 36 built-in widgets, 9 ArtixForge plugins, and 7 GForge plugins updated to new two-argument `render(Widget*, RenderTree*)` signature; `Rect area` now derived from `WidgetBase *base = (WidgetBase *)(self + 1); Rect area = base->render_area` at the top of each render function
+- **RenderTree union naming** — all field accesses migrated to `node->u.field` naming convention: `u.text`, `u.list`, `u.input`, `u.container`, `u.badge`, `u.tabs`, `u.split_panes`, `u.table`, `u.tree`, `u.context_menu`, `u.form`, `u.gauge`, `u.calendar`, `u.spinner`, `u.toast`, `u.checkbox`, `u.toggle`, `u.separator`, `u.cursor`
+- **Backend layout pass** — `layout_tree` updated with union field naming; all node type cases in layout switch use `child->u.*` accessors
+- **Gcore backend** — `free_tree_copy`, `copy_tree_malloc`, `hit_test`, and `synthesize_key_events` updated to use `u.container` and `u.list` union fields
+- **Gcore renderer** — `update_hover_states` and `render_node` updated with union field naming throughout all render node type cases
+- **Plugin build system** — `-fPIC` added to plugin `.so` compilation flags; `-Wl,--unresolved-symbols=ignore-all` linker flag added to defer core symbol resolution to daemon `dlopen` time
+- **Daemon plugin loading** — `dlopen` flags changed from `RTLD_NOW` to `RTLD_NOW | RTLD_GLOBAL` so plugins can resolve core symbols (`g_session_arena`, `arena_alloc`, `arena_strdup`) from the daemon binary at load time
+
+### Fixed
+- **ArtixForge plugins** — all 9 plugins (`install_hub`, `anvil`, `poweruser`, `recovery`, `iso`, `migration_init`, `migration_desktop`, `password_confirm`, `user_manager`) updated: render signatures, union field naming, overlay sub-widget dispatch, `widget_base_init` argument types
+- **GForge plugins** — all 7 plugins (`gforge_hub`, `stage3_picker`, `profile_picker`, `kernel_picker`, `use_flags`, `cflags`, `plugin`) updated: render signatures, union field naming, `widget_base_init` argument types
+- **POSIX compliance** — `port_linux.h` undefs `_POSIX_C_SOURCE` before defining `_GNU_SOURCE` for `SO_PEERCRED`/`struct ucred`; `daemon.c` defines `_GNU_SOURCE` before all includes; `progress.c` defines `_XOPEN_SOURCE 500` for `realpath`; `wayland.c` migrated from `memfd_create` to `shm_open`+`ftruncate` POSIX-compliant shared memory path
+- **Unused function warnings** — `term_write_diff` in `terminal.c` wrapped in `#if 0` block for future incremental rendering work; `glyph_cache_put` in `renderer.c` similarly preserved
+- **Unused variable warning** — `Rect area` removed from `tabs_render` in `tabs.c`
+- **`badge_render` signature** — updated to match new `void (*render)(Widget*, RenderTree*)` vtable type
+
+### Housekeeping
+- Rewritten all widgets to match the new upgrades
+- Everything else I did not document in my haitus of programming and trying to fix FILLY for several days straight, I want to poke my eyes out.
+
 ## v0.5.0 (2026-07-26) — FILLY
 
 ### Added

@@ -7,7 +7,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-#include "core/undo.h"
 
 typedef struct {
     char *widget_type;
@@ -89,10 +88,10 @@ static void render_scaled_tree(RenderTree *src, RenderTree *dst, float scale, in
     dst->resolved_style.padding[1] = (int)(src->resolved_style.padding[1] * scale);
     dst->resolved_style.padding[2] = (int)(src->resolved_style.padding[2] * scale);
     dst->resolved_style.padding[3] = (int)(src->resolved_style.padding[3] * scale);
-    if (dst->type == RNODE_CONTAINER && src->container.children && src->container.child_count > 0) {
-        dst->container.children = arena_alloc(arena, src->container.child_count * sizeof(RenderTree));
-        for (int i = 0; i < src->container.child_count; i++)
-            render_scaled_tree(&src->container.children[i], &dst->container.children[i], scale,
+    if (dst->type == RNODE_CONTAINER && dst->u.container.children && dst->u.container.child_count > 0) {
+        dst->u.container.children = arena_alloc(arena, dst->u.container.child_count * sizeof(RenderTree));
+        for (int i = 0; i < dst->u.container.child_count; i++)
+            render_scaled_tree(&src->u.container.children[i], &dst->u.container.children[i], scale,
                               ox + (int)(src->rect.x * scale), oy + (int)(src->rect.y * scale), arena);
     }
 }
@@ -103,8 +102,10 @@ static void builder_push_undo(WidgetBuilderData *d, const char *desc) {
     undo_stack_push(d->undo, a);
 }
 
-static void builder_render(Widget *self, Rect area, RenderTree *out) {
+static void builder_render(Widget *self, RenderTree *out) {
     WidgetBuilderData *d = (WidgetBuilderData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = area.w - 2;
@@ -117,14 +118,13 @@ static void builder_render(Widget *self, Rect area, RenderTree *out) {
             Widget *lw = d->items[d->selected_item].live_widget;
             RenderTree tree;
             memset(&tree, 0, sizeof(tree));
-            Rect r = rect_new(0, 0, box_w, box_h);
-            lw->vtable.render(lw, r, &tree);
+            lw->vtable.render(lw, &tree);
             if (g_active_theme) resolve_node_styles(&tree, g_active_theme);
             *out = tree;
         } else {
             out->type = RNODE_TEXT;
             out->rect = rect_new(0, 0, box_w, box_h);
-            out->text.content = "No widget selected for preview";
+            out->u.text.content = "No widget selected for preview";
         }
         return;
     }
@@ -139,23 +139,23 @@ static void builder_render(Widget *self, Rect area, RenderTree *out) {
 
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w, 1);
-    children[0].text.content = arena_strdup(g_session_arena, "FILLY Widget Builder");
+    children[0].u.text.content = arena_strdup(g_session_arena, "FILLY Widget Builder");
     children[0].style_class = "text";
     children[0].state = "title";
 
     children[1].type = RNODE_LIST;
     children[1].rect = rect_new(1, 1, left_w, box_h - 3);
-    children[1].list.item_count = d->item_count;
-    children[1].list.selected = d->selected_item;
-    children[1].list.items = arena_alloc(g_session_arena, d->item_count * sizeof(ListItem));
+    children[1].u.list.item_count = d->item_count;
+    children[1].u.list.selected = d->selected_item;
+    children[1].u.list.items = arena_alloc(g_session_arena, d->item_count * sizeof(ListItem));
     for (int i = 0; i < d->item_count; i++)
-        children[1].list.items[i].label = arena_strdup(g_session_arena, d->items[i].widget_type);
+        children[1].u.list.items[i].label = arena_strdup(g_session_arena, d->items[i].widget_type);
     children[1].style_class = "list";
 
     children[2].type = RNODE_CONTAINER;
     children[2].rect = rect_new(center_x, 1, center_w, box_h - 3);
-    children[2].container.border = BORDER_SINGLE;
-    children[2].container.padding = edgeinsets_zero();
+    children[2].u.container.border = BORDER_SINGLE;
+    children[2].u.container.padding = edgeinsets_zero();
     children[2].style_class = "canvas";
 
     int canvas_child_count = d->item_count;
@@ -167,13 +167,12 @@ static void builder_render(Widget *self, Rect area, RenderTree *out) {
                                             (int)(item->y * d->scale) + d->canvas_oy,
                                             (int)(item->w * d->scale),
                                             (int)(item->h * d->scale));
-        canvas_children[i].container.border = BORDER_SINGLE;
+        canvas_children[i].u.container.border = BORDER_SINGLE;
         canvas_children[i].style_class = i == d->selected_item ? "selected" : "normal";
         if (item->live_widget) {
             RenderTree preview;
             memset(&preview, 0, sizeof(preview));
-            item->live_widget->vtable.render(item->live_widget,
-                rect_new(0, 0, item->w, item->h), &preview);
+            item->live_widget->vtable.render(item->live_widget, &preview);
             RenderTree *scaled = arena_alloc(g_session_arena, sizeof(RenderTree));
             render_scaled_tree(&preview, scaled, d->scale,
                               (int)(item->x * d->scale) + d->canvas_ox,
@@ -182,16 +181,16 @@ static void builder_render(Widget *self, Rect area, RenderTree *out) {
             canvas_children[i] = *scaled;
         }
     }
-    children[2].container.children = canvas_children;
-    children[2].container.child_count = canvas_child_count;
+    children[2].u.container.children = canvas_children;
+    children[2].u.container.child_count = canvas_child_count;
 
     children[3].type = RNODE_LIST;
     children[3].rect = rect_new(right_x, 1, right_w, box_h - 3);
-    children[3].list.item_count = d->palette_count;
-    children[3].list.selected = d->palette_idx;
-    children[3].list.items = arena_alloc(g_session_arena, d->palette_count * sizeof(ListItem));
+    children[3].u.list.item_count = d->palette_count;
+    children[3].u.list.selected = d->palette_idx;
+    children[3].u.list.items = arena_alloc(g_session_arena, d->palette_count * sizeof(ListItem));
     for (int i = 0; i < d->palette_count; i++)
-        children[3].list.items[i].label = arena_strdup(g_session_arena, d->palette_types[i]);
+        children[3].u.list.items[i].label = arena_strdup(g_session_arena, d->palette_types[i]);
     children[3].style_class = "list";
 
     children[4].type = RNODE_TEXT;
@@ -200,34 +199,31 @@ static void builder_render(Widget *self, Rect area, RenderTree *out) {
     if (d->selected_item >= 0 && d->selected_item < d->item_count) {
         BuilderItem *item = &d->items[d->selected_item];
         if (d->prop_editing) {
-            snprintf(props, sizeof(props),
-                "Editing: %s > %s_", item->widget_type,
-                d->prop_edit_buf);
+            snprintf(props, sizeof(props), "Editing: %s > %s_", item->widget_type, d->prop_edit_buf);
         } else {
             char *pj = cJSON_PrintUnformatted(item->params);
-            snprintf(props, sizeof(props),
-                "%s | %s | %d,%d %dx%d | %s",
+            snprintf(props, sizeof(props), "%s | %s | %d,%d %dx%d | %s",
                 item->widget_type, item->title, item->x, item->y, item->w, item->h, pj);
             free(pj);
         }
     } else {
         strcpy(props, "Click palette to add, drag canvas items, F5 preview, S save, Ctrl+Z undo");
     }
-    children[4].text.content = arena_strdup(g_session_arena, props);
+    children[4].u.text.content = arena_strdup(g_session_arena, props);
     children[4].style_class = "text";
 
     children[5].type = RNODE_TEXT;
     children[5].rect = rect_new(1, box_h, box_w, 1);
-    children[5].text.content = "F1:tree F2:canvas F3:palette F4:props F5:preview S:save Del:remove Esc:quit";
+    children[5].u.text.content = "F1:tree F2:canvas F3:palette F4:props F5:preview S:save Del:remove Esc:quit";
     children[5].style_class = "text";
     children[5].state = "muted";
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(0, 0, area.w, area.h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 6;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 6;
 }
 
 static EventResult builder_handle_event(Widget *self, Event *ev, Backend *backend) {

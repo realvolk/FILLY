@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-
+#include <time.h>
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
@@ -37,10 +37,10 @@ bool gcore_init_font(const char *font_path, int default_size) {
     if (!f) f = fopen("/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "rb");
     if (!f) f = fopen("/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf", "rb");
     if (!f) {
-        f = fopen("/usr/share/fonts/noto/NotoSansCJK-Regular.ttc", "rb");
+        f = fopen("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttf", "rb");
     }
     if (!f) {
-        f = fopen("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttf", "rb");
+        f = fopen("/usr/share/fonts/noto/NotoSansCJK-Regular.ttc", "rb");
     }
     if (!f) return false;
     fseek(f, 0, SEEK_END);
@@ -77,7 +77,8 @@ static unsigned char *glyph_cache_get(int codepoint, int size, int *w, int *h) {
     return NULL;
 }
 
-__attribute__((unused)) static void glyph_cache_put(int codepoint, int size, unsigned char *bitmap, int w, int h) {
+#if 0
+static void glyph_cache_put(int codepoint, int size, unsigned char *bitmap, int w, int h) {
     if (glyph_cache_count >= GLYPH_CACHE_SIZE) {
         free(glyph_cache[0].bitmap);
         memmove(&glyph_cache[0], &glyph_cache[1], (GLYPH_CACHE_SIZE - 1) * sizeof(GlyphCacheEntry));
@@ -90,6 +91,7 @@ __attribute__((unused)) static void glyph_cache_put(int codepoint, int size, uns
     glyph_cache[glyph_cache_count].h = h;
     glyph_cache_count++;
 }
+#endif
 
 static void draw_rect(PixelBuffer *pb, int x, int y, int w, int h, uint32_t color) {
     if (x < 0) { w += x; x = 0; }
@@ -134,9 +136,9 @@ void draw_text_pixel(PixelBuffer *pb, int x, int y, const char *text, int size, 
         if (!bitmap) {
             bitmap = stbtt_GetCodepointBitmap(&font_info, scale, scale, *text, &cw, &ch, NULL, NULL);
         }
+        int advance, lsb;
+        stbtt_GetCodepointHMetrics(&font_info, *text, &advance, &lsb);
         if (bitmap) {
-            int advance, lsb;
-            stbtt_GetCodepointHMetrics(&font_info, *text, &advance, &lsb);
             int x0 = pen_x + (int)(lsb * scale);
             int y0 = y + baseline;
             for (int row = 0; row < ch; row++) {
@@ -157,8 +159,8 @@ void draw_text_pixel(PixelBuffer *pb, int x, int y, const char *text, int size, 
                     }
                 }
             }
-            pen_x += (int)(advance * scale);
         }
+        pen_x += (int)(advance * scale);
         text++;
     }
 }
@@ -197,14 +199,14 @@ static void update_hover_states(RenderTree *node, int mx, int my, int off_x, int
             node->state_owned = false;
         }
     }
-    if (node->type == RNODE_CONTAINER && node->container.children) {
+    if (node->type == RNODE_CONTAINER && node->u.container.children) {
         WidgetStyle *s = &node->resolved_style;
-        int pad_left = node->container.padding.left;
-        int pad_top = node->container.padding.top;
+        int pad_left = node->u.container.padding.left;
+        int pad_top = node->u.container.padding.top;
         int cx = x + s->margin[3] + pad_left + s->border_width;
         int cy = y + s->margin[0] + pad_top + s->border_width;
-        for (int i = 0; i < node->container.child_count; i++)
-            update_hover_states(&node->container.children[i], mx, my, cx, cy);
+        for (int i = 0; i < node->u.container.child_count; i++)
+            update_hover_states(&node->u.container.children[i], mx, my, cx, cy);
     }
 }
 
@@ -221,57 +223,45 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
     node->dirty = false;
     WidgetStyle *s = &node->resolved_style;
 
-    float sx = node->resolved_style.scale_x;
-    float sy = node->resolved_style.scale_y;
-    float rot = node->resolved_style.rotation;
-    float tx = node->resolved_style.translate_x;
-    float ty = node->resolved_style.translate_y;
-
-    if (sx != 1.0f || sy != 1.0f || rot != 0.0f || tx != 0.0f || ty != 0.0f) {
-        int cx = x + w / 2;
-        int cy = y + h / 2;
-        int new_w = (int)(w * sx);
-        int new_h = (int)(h * sy);
-        x = cx - new_w / 2 + (int)tx;
-        y = cy - new_h / 2 + (int)ty;
-        w = new_w;
-        h = new_h;
-    }
-
     draw_rounded_rect(pb, x, y, w, h, s->border_radius, s->bg_color);
-    if (s->border_width > 0 && node->type == RNODE_CONTAINER)
-        draw_border(pb, x, y, w, h, s->border_width, 0, s->border_color);
 
     int pad_left = 0, pad_top = 0, pad_right = 0, pad_bottom = 0;
     if (node->type == RNODE_CONTAINER) {
-        pad_left = node->container.padding.left;
-        pad_top = node->container.padding.top;
-        pad_right = node->container.padding.right;
-        pad_bottom = node->container.padding.bottom;
+        pad_left = node->u.container.padding.left;
+        pad_top = node->u.container.padding.top;
+        pad_right = node->u.container.padding.right;
+        pad_bottom = node->u.container.padding.bottom;
     }
     int content_x = x + s->margin[3] + pad_left + s->border_width;
     int content_y = y + s->margin[0] + pad_top + s->border_width;
     int content_w = w - s->margin[1] - s->margin[3] - pad_left - pad_right - s->border_width * 2;
     int content_h = h - s->margin[2] - s->margin[0] - pad_top - pad_bottom - s->border_width * 2;
-    if (content_w <= 0 || content_h <= 0) return;
+    if (content_w <= 0) return;
 
     switch (node->type) {
-    case RNODE_TEXT:
-        draw_text_pixel(pb, content_x, content_y, node->text.content, s->font_size, s->fg_color);
+    case RNODE_TEXT: {
+        int text_h = s->font_size + s->padding[0] + s->padding[2];
+        if (content_h < text_h) content_h = text_h;
+        draw_text_pixel(pb, content_x, content_y, node->u.text.content, s->font_size, s->fg_color);
         break;
+    }
     case RNODE_CONTAINER:
-        for (int i = 0; i < node->container.child_count; i++)
-            render_node(&node->container.children[i], content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+        for (int i = 0; i < node->u.container.child_count; i++) {
+            RenderTree *child = &node->u.container.children[i];
+            int min_h = child->resolved_style.font_size + child->resolved_style.padding[0] + child->resolved_style.padding[2];
+            if (child->rect.h < min_h) child->rect.h = min_h;
+            render_node(child, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+        }
         break;
     case RNODE_LIST: {
         int item_h = s->font_size + s->padding[0] + s->padding[2];
-        for (int i = 0; i < node->list.item_count && i * item_h < content_h; i++) {
+        for (int i = 0; i < node->u.list.item_count && i * item_h < content_h; i++) {
             int iy = content_y + i * item_h;
-            bool is_sel = (i == node->list.selected);
+            bool is_sel = (i == node->u.list.selected);
             uint32_t bg = is_sel ? s->accent_color : s->bg_color;
             uint32_t fg = is_sel ? 0xFFFFFFFF : s->fg_color;
             draw_rounded_rect(pb, content_x, iy, content_w, item_h, 0, bg);
-            draw_text_pixel(pb, content_x + s->padding[3], iy + s->padding[0], node->list.items[i].label, s->font_size, fg);
+            draw_text_pixel(pb, content_x + s->padding[3], iy + s->padding[0], node->u.list.items[i].label, s->font_size, fg);
         }
         break;
     }
@@ -279,10 +269,10 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
         int input_h = s->font_size + s->padding[0] + s->padding[2];
         draw_rounded_rect(pb, content_x, content_y, content_w, input_h, s->border_radius, s->bg_color);
         draw_border(pb, content_x, content_y, content_w, input_h, 1, s->border_radius, s->border_color);
-        const char *t = node->input.text && strlen(node->input.text) ? node->input.text : (node->input.placeholder ? node->input.placeholder : "");
+        const char *t = node->u.input.text && strlen(node->u.input.text) ? node->u.input.text : (node->u.input.placeholder ? node->u.input.placeholder : "");
         draw_text_pixel(pb, content_x + s->padding[3], content_y + s->padding[0], t, s->font_size, s->fg_color);
-        if (node->input.text && !node->input.masked && node->input.cursor >= 0) {
-            int cx = content_x + s->padding[3] + node->input.cursor * (s->font_size / 2);
+        if (node->u.input.text && !node->u.input.masked && node->u.input.cursor >= 0) {
+            int cx = content_x + s->padding[3] + node->u.input.cursor * (s->font_size / 2);
             draw_rect(pb, cx, content_y + s->padding[0], 2, s->font_size, s->fg_color);
         }
         break;
@@ -291,64 +281,64 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
         int box = s->font_size;
         draw_rounded_rect(pb, content_x, content_y + s->padding[0], box, box, 3, s->bg_color);
         draw_border(pb, content_x, content_y + s->padding[0], box, box, 1, 3, s->border_color);
-        if (node->checkbox.checked)
+        if (node->u.checkbox.checked)
             draw_text_pixel(pb, content_x + 2, content_y + s->padding[0] - 1, "x", s->font_size, s->accent_color);
-        draw_text_pixel(pb, content_x + box + 6, content_y + s->padding[0], node->checkbox.label, s->font_size, s->fg_color);
+        draw_text_pixel(pb, content_x + box + 6, content_y + s->padding[0], node->u.checkbox.label, s->font_size, s->fg_color);
         break;
     }
     case RNODE_TOGGLE: {
         int toggle_w = s->font_size * 2 + 4, toggle_h = s->font_size + 4, knob = s->font_size;
-        draw_rounded_rect(pb, content_x, content_y + s->padding[0], toggle_w, toggle_h, toggle_h/2, node->toggle.value ? s->accent_color : s->border_color);
-        int kx = node->toggle.value ? content_x + toggle_w - knob - 2 : content_x + 2;
+        draw_rounded_rect(pb, content_x, content_y + s->padding[0], toggle_w, toggle_h, toggle_h/2, node->u.toggle.value ? s->accent_color : s->border_color);
+        int kx = node->u.toggle.value ? content_x + toggle_w - knob - 2 : content_x + 2;
         draw_rounded_rect(pb, kx, content_y + s->padding[0] + 2, knob, knob, knob/2, 0xFFFFFFFF);
-        draw_text_pixel(pb, content_x + toggle_w + 8, content_y + s->padding[0], node->toggle.label, s->font_size, s->fg_color);
+        draw_text_pixel(pb, content_x + toggle_w + 8, content_y + s->padding[0], node->u.toggle.label, s->font_size, s->fg_color);
         break;
     }
     case RNODE_SPINNER: {
         const char *frames[] = {"⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"};
-        draw_text_pixel(pb, content_x, content_y, frames[node->spinner.frame % 10], s->font_size, s->accent_color);
-        draw_text_pixel(pb, content_x + s->font_size + 8, content_y, node->spinner.message, s->font_size, s->fg_color);
+        draw_text_pixel(pb, content_x, content_y, frames[node->u.spinner.frame % 10], s->font_size, s->accent_color);
+        draw_text_pixel(pb, content_x + s->font_size + 8, content_y, node->u.spinner.message, s->font_size, s->fg_color);
         break;
     }
     case RNODE_SEPARATOR:
-        if (node->separator.orientation == ORIENT_HORIZONTAL)
+        if (node->u.separator.orientation == ORIENT_HORIZONTAL)
             draw_rect(pb, content_x, content_y + (content_h/2), content_w, 1, s->border_color);
         else
             draw_rect(pb, content_x + (content_w/2), content_y, 1, content_h, s->border_color);
         break;
     case RNODE_BADGE:
-        draw_rounded_rect(pb, content_x, content_y, content_w, content_h, 999, s->accent_color);
-        draw_text_pixel(pb, content_x + s->padding[3], content_y + s->padding[0], node->badge.text, s->font_size, 0xFFFFFFFF);
+        draw_rounded_rect(pb, x, y, w, h, 999, s->accent_color);
+        draw_text_pixel(pb, x + s->padding[3], y + s->padding[0], node->u.badge.text, s->font_size, 0xFFFFFFFF);
         break;
     case RNODE_CURSOR:
-        draw_rect(pb, content_x + node->cursor.x, content_y + node->cursor.y, s->font_size/2, s->font_size, s->fg_color);
+        draw_rect(pb, content_x + node->u.cursor.x, content_y + node->u.cursor.y, s->font_size/2, s->font_size, s->fg_color);
         break;
     case RNODE_TABLE: {
-        int col_w = content_w / (node->table.header_count ? node->table.header_count : 1);
+        int col_w = content_w / (node->u.table.header_count ? node->u.table.header_count : 1);
         int row_h = s->font_size + s->padding[0] + s->padding[2];
-        for (int c = 0; c < node->table.header_count; c++)
-            draw_text_pixel(pb, content_x + c * col_w + s->padding[3], content_y, node->table.headers[c], s->font_size, s->accent_color);
-        for (int r = 0; r < node->table.row_count && (r+1)*row_h < content_h; r++) {
+        for (int c = 0; c < node->u.table.header_count; c++)
+            draw_text_pixel(pb, content_x + c * col_w + s->padding[3], content_y, node->u.table.headers[c], s->font_size, s->accent_color);
+        for (int r = 0; r < node->u.table.row_count && (r+1)*row_h < content_h; r++) {
             int ry = content_y + (r+1) * row_h;
-            bool sel = (r == node->table.selected_row);
+            bool sel = (r == node->u.table.selected_row);
             if (sel) draw_rounded_rect(pb, content_x, ry, content_w, row_h, 0, s->accent_color);
-            for (int c = 0; c < node->table.header_count; c++)
-                draw_text_pixel(pb, content_x + c * col_w + s->padding[3], ry + s->padding[0], node->table.rows[r][c], s->font_size, sel ? 0xFFFFFFFF : s->fg_color);
+            for (int c = 0; c < node->u.table.header_count; c++)
+                draw_text_pixel(pb, content_x + c * col_w + s->padding[3], ry + s->padding[0], node->u.table.rows[r][c], s->font_size, sel ? 0xFFFFFFFF : s->fg_color);
         }
         break;
     }
     case RNODE_TREE: {
         int row_h = s->font_size + s->padding[0] + s->padding[2];
         int flat[256], flat_count = 0;
-        for (int i = 0; i < node->tree.node_count; i++) {
+        for (int i = 0; i < node->u.tree.node_count; i++) {
             flat[flat_count++] = i;
-            if (node->tree.nodes[i].expanded && node->tree.nodes[i].child_count > 0)
-                for (int j = 0; j < node->tree.nodes[i].child_count; j++)
-                    flat[flat_count++] = node->tree.node_count + j;
+            if (node->u.tree.nodes[i].expanded && node->u.tree.nodes[i].child_count > 0)
+                for (int j = 0; j < node->u.tree.nodes[i].child_count; j++)
+                    flat[flat_count++] = node->u.tree.node_count + j;
         }
         for (int i = 0; i < flat_count && i * row_h < content_h; i++) {
             int idx = flat[i], iy = content_y + i * row_h;
-            TreeNode *tn = (idx < node->tree.node_count) ? &node->tree.nodes[idx] : NULL;
+            TreeNode *tn = (idx < node->u.tree.node_count) ? &node->u.tree.nodes[idx] : NULL;
             if (tn && tn->child_count > 0)
                 draw_text_pixel(pb, content_x, iy + s->padding[0], tn->expanded ? "▼ " : "▶ ", s->font_size, s->fg_color);
             else
@@ -361,80 +351,120 @@ static void render_node(RenderTree *node, int off_x, int off_y, PixelBuffer *pb,
         int bar_h = s->font_size + 4;
         draw_rounded_rect(pb, content_x, content_y + content_h/2 - bar_h/2, content_w, bar_h, bar_h/2, s->bg_color);
         draw_border(pb, content_x, content_y + content_h/2 - bar_h/2, content_w, bar_h, 1, bar_h/2, s->border_color);
-        int fill_w = (content_w - 2) * node->gauge.percent / 100;
+        int fill_w = (content_w - 2) * node->u.gauge.percent / 100;
         if (fill_w > 0) draw_rounded_rect(pb, content_x+1, content_y + content_h/2 - bar_h/2 + 1, fill_w, bar_h-2, bar_h/2-1, s->accent_color);
-        char pct[16]; snprintf(pct, sizeof(pct), "%s %d%%", node->gauge.label, node->gauge.percent);
+        char pct[16]; snprintf(pct, sizeof(pct), "%s %d%%", node->u.gauge.label, node->u.gauge.percent);
         draw_text_pixel(pb, content_x + (content_w - (int)strlen(pct) * s->font_size/2)/2, content_y + content_h/2 - s->font_size/2, pct, s->font_size, 0xFFFFFFFF);
         break;
     }
-    case RNODE_CALENDAR:
-        draw_text_pixel(pb, content_x, content_y, "Calendar", s->font_size, s->fg_color);
+    case RNODE_CALENDAR: {
+        const char *days[] = {"Su","Mo","Tu","We","Th","Fr","Sa"};
+        int dim = 31;
+        switch (node->u.calendar.month) {
+            case 4: case 6: case 9: case 11: dim = 30; break;
+            case 2: dim = (node->u.calendar.year % 4 == 0 && (node->u.calendar.year % 100 != 0 || node->u.calendar.year % 400 == 0)) ? 29 : 28; break;
+        }
+        struct tm tm = { .tm_mday = 1, .tm_mon = node->u.calendar.month - 1, .tm_year = node->u.calendar.year - 1900 };
+        mktime(&tm);
+        int first_wday = tm.tm_wday;
+        
+        int cell_w = (content_w - s->padding[3] - s->padding[1]) / 7;
+        int cell_h = s->font_size + 4;
+        
+        for (int i = 0; i < 7; i++) {
+            int dx = content_x + s->padding[3] + i * cell_w + (cell_w - 20) / 2;
+            draw_text_pixel(pb, dx, content_y + s->padding[0], days[i], s->font_size - 2, s->accent_color);
+        }
+        
+        int row = 1;
+        for (int d = 1; d <= dim; d++) {
+            int col = (first_wday + d - 1) % 7;
+            if (col == 0 && d > 1) row++;
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%d", d);
+            int text_w = (int)strlen(buf) * s->font_size / 2;
+            int dx = content_x + s->padding[3] + col * cell_w + (cell_w - text_w) / 2;
+            int dy_bg = content_y + s->padding[0] + row * cell_h;
+            int dy_text = dy_bg;
+            if (d == node->u.calendar.selected_day) {
+                int highlight_w = text_w + 12;
+                int hx = content_x + s->padding[3] + col * cell_w + (cell_w - highlight_w) / 2;
+                draw_rounded_rect(pb, hx, dy_bg, highlight_w, cell_h, 4, s->accent_color);
+                draw_text_pixel(pb, dx, dy_text, buf, s->font_size, 0xFFFFFFFF);
+            } else {
+                draw_text_pixel(pb, dx, dy_text, buf, s->font_size, s->fg_color);
+            }
+        }
         break;
+    }
     case RNODE_FORM: {
         int row_h = s->font_size + s->padding[0] + s->padding[2];
-        for (int i = 0; i < node->form.field_count && i * row_h < content_h; i++) {
+        for (int i = 0; i < node->u.form.field_count && i * row_h < content_h; i++) {
             int iy = content_y + i * row_h;
             char buf[256];
-            snprintf(buf, sizeof(buf), "%s: %s", node->form.fields[i].label, node->form.fields[i].value);
-            draw_text_pixel(pb, content_x, iy + s->padding[0], buf, s->font_size, i == node->form.focused ? s->accent_color : s->fg_color);
+            snprintf(buf, sizeof(buf), "%s: %s", node->u.form.fields[i].label, node->u.form.fields[i].value);
+            draw_text_pixel(pb, content_x, iy + s->padding[0], buf, s->font_size, i == node->u.form.focused ? s->accent_color : s->fg_color);
         }
-        if (node->form.field_count * row_h < content_h) {
-            int by = content_y + node->form.field_count * row_h;
+        if (node->u.form.field_count * row_h < content_h) {
+            int by = content_y + node->u.form.field_count * row_h;
             draw_rounded_rect(pb, content_x, by, content_w, row_h, s->border_radius, s->accent_color);
-            draw_text_pixel(pb, content_x + s->padding[3], by + s->padding[0], node->form.submit_label, s->font_size, 0xFFFFFFFF);
+            draw_text_pixel(pb, content_x + s->padding[3], by + s->padding[0], node->u.form.submit_label, s->font_size, 0xFFFFFFFF);
         }
         break;
     }
     case RNODE_TABS: {
         int tab_h = s->font_size + s->padding[0] + s->padding[2], lx = content_x;
-        for (int i = 0; i < node->tabs.tab_count; i++) {
-            int tw = strlen(node->tabs.tab_labels[i]) * (s->font_size/2) + s->padding[1] + s->padding[3];
-            if (i == node->tabs.active) {
+        for (int i = 0; i < node->u.tabs.tab_count; i++) {
+            int tw = strlen(node->u.tabs.tab_labels[i]) * (s->font_size/2) + s->padding[1] + s->padding[3];
+            if (i == node->u.tabs.active) {
                 draw_rounded_rect(pb, lx, content_y, tw, tab_h, s->border_radius, s->accent_color);
-                draw_text_pixel(pb, lx + s->padding[3], content_y + s->padding[0], node->tabs.tab_labels[i], s->font_size, 0xFFFFFFFF);
+                draw_text_pixel(pb, lx + s->padding[3], content_y + s->padding[0], node->u.tabs.tab_labels[i], s->font_size, 0xFFFFFFFF);
             } else {
-                draw_text_pixel(pb, lx + s->padding[3], content_y + s->padding[0], node->tabs.tab_labels[i], s->font_size, s->fg_color);
+                draw_text_pixel(pb, lx + s->padding[3], content_y + s->padding[0], node->u.tabs.tab_labels[i], s->font_size, s->fg_color);
             }
             lx += tw + 4;
         }
-        if (node->tabs.child && tab_h < content_h)
-            render_node(node->tabs.child, content_x, content_y + tab_h, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+        if (node->u.tabs.child && tab_h < content_h)
+            render_node(node->u.tabs.child, content_x, content_y + tab_h, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         break;
     }
     case RNODE_SPLIT_PANES: {
-        int sp = node->split_panes.split_position > 0 ? node->split_panes.split_position :
-                  (node->split_panes.orientation == ORIENT_HORIZONTAL ? content_w/2 : content_h/2);
-        if (node->split_panes.orientation == ORIENT_HORIZONTAL) {
-            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+        int sp = node->u.split_panes.split_position > 0 ? node->u.split_panes.split_position :
+                  (node->u.split_panes.orientation == ORIENT_HORIZONTAL ? content_w/2 : content_h/2);
+        if (node->u.split_panes.orientation == ORIENT_HORIZONTAL) {
+            render_node(node->u.split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
             draw_rect(pb, content_x + sp, content_y, 1, content_h, s->border_color);
-            render_node(node->split_panes.second, content_x + sp + 1, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+            render_node(node->u.split_panes.second, content_x + sp + 1, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         } else {
-            render_node(node->split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+            render_node(node->u.split_panes.first, content_x, content_y, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
             draw_rect(pb, content_x, content_y + sp, content_w, 1, s->border_color);
-            render_node(node->split_panes.second, content_x, content_y + sp + 1, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
+            render_node(node->u.split_panes.second, content_x, content_y + sp + 1, pb, theme, arena, self_dirty || parent_dirty, dirty_rect);
         }
         break;
     }
     case RNODE_CONTEXT_MENU: {
         int item_h = s->font_size + s->padding[0] + s->padding[2];
-        for (int i = 0; i < node->context_menu.item_count && i * item_h < content_h; i++) {
+        for (int i = 0; i < node->u.context_menu.item_count && i * item_h < content_h; i++) {
             int iy = content_y + i * item_h;
-            if (i == node->context_menu.selected)
+            if (i == node->u.context_menu.selected)
                 draw_rounded_rect(pb, content_x, iy, content_w, item_h, 0, s->accent_color);
-            draw_text_pixel(pb, content_x + s->padding[3], iy + s->padding[0], node->context_menu.items[i].label, s->font_size, i == node->context_menu.selected ? 0xFFFFFFFF : s->fg_color);
+            draw_text_pixel(pb, content_x + s->padding[3], iy + s->padding[0], node->u.context_menu.items[i].label, s->font_size, i == node->u.context_menu.selected ? 0xFFFFFFFF : s->fg_color);
         }
         break;
     }
     case RNODE_TOAST: {
-        int tw = strlen(node->toast.message) * (s->font_size/2) + s->padding[1] + s->padding[3];
+        int tw = strlen(node->u.toast.message) * (s->font_size/2) + s->padding[1] + s->padding[3];
         int tx = content_x + (content_w - tw)/2;
         int ty = content_y + content_h - s->font_size - s->padding[2] - s->padding[0];
         draw_rounded_rect(pb, tx, ty, tw, s->font_size + s->padding[0] + s->padding[2], s->border_radius, s->bg_color);
         draw_border(pb, tx, ty, tw, s->font_size + s->padding[0] + s->padding[2], 1, s->border_radius, s->border_color);
-        draw_text_pixel(pb, tx + s->padding[3], ty + s->padding[0], node->toast.message, s->font_size, s->fg_color);
+        draw_text_pixel(pb, tx + s->padding[3], ty + s->padding[0], node->u.toast.message, s->font_size, s->fg_color);
         break;
     }
     }
+
+    if (s->border_width > 0 && node->type == RNODE_CONTAINER)
+        draw_border(pb, x, y, w, h, s->border_width, 0, s->border_color);
 }
 
 void gcore_render_tree_to_pixels(RenderTree *tree, PixelBuffer *pb, Theme *theme, Arena *arena) {

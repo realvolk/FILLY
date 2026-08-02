@@ -49,8 +49,10 @@ static int all_group_count = 9;
 
 extern Arena *g_session_arena;
 
-static void um_render(Widget *self, Rect area, RenderTree *out) {
+static void um_render(Widget *self, RenderTree *out) {
     UMData *d = (UMData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.70f);
@@ -62,7 +64,7 @@ static void um_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 4 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena,
+    children[0].u.text.content = arena_strdup(g_session_arena,
         d->mode == 1 ? "Add / Edit User" : d->mode == 2 ? "Delete User" : "Manage Users");
         d->base.accepts_text_input = true;
     children[0].style_class = "text"; children[0].state = "title";
@@ -72,18 +74,18 @@ static void um_render(Widget *self, Rect area, RenderTree *out) {
         children[1].rect = rect_new(1, 1, box_w - 2, 1);
         char buf[256];
         snprintf(buf, sizeof(buf), "Delete user '%s'?", d->users[d->del_idx].name);
-        children[1].text.content = arena_strdup(g_session_arena, buf);
+        children[1].u.text.content = arena_strdup(g_session_arena, buf);
         children[1].style_class = "text";
         children[2].type = RNODE_TEXT;
         children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-        children[2].text.content = "Y:yes  N:no";
+        children[2].u.text.content = "Y:yes  N:no";
         children[2].style_class = "text"; children[2].state = "muted";
         out->type = RNODE_CONTAINER;
         out->rect = rect_new(box_x, box_y, box_w, box_h);
-        out->container.border = BORDER_SINGLE;
-        out->container.padding = edgeinsets_zero();
-        out->container.children = children;
-        out->container.child_count = 3;
+        out->u.container.border = BORDER_SINGLE;
+        out->u.container.padding = edgeinsets_zero();
+        out->u.container.children = children;
+        out->u.container.child_count = 3;
         return;
     }
 
@@ -91,25 +93,25 @@ static void um_render(Widget *self, Rect area, RenderTree *out) {
         if (d->user_count == 0) {
             children[1].type = RNODE_TEXT;
             children[1].rect = rect_new(1, 2, box_w - 2, 1);
-            children[1].text.content = "No users configured. Press A to add one.";
+            children[1].u.text.content = "No users configured. Press A to add one.";
             children[1].style_class = "text"; children[1].state = "muted";
         } else {
             children[1].type = RNODE_LIST;
             children[1].rect = rect_new(1, 1, box_w - 2, box_h - 4);
-            children[1].list.item_count = d->user_count;
-            children[1].list.selected = d->selected;
-            children[1].list.items = arena_alloc(g_session_arena, d->user_count * sizeof(ListItem));
+            children[1].u.list.item_count = d->user_count;
+            children[1].u.list.selected = d->selected;
+            children[1].u.list.items = arena_alloc(g_session_arena, d->user_count * sizeof(ListItem));
             for (int i = 0; i < d->user_count; i++) {
                 char label[256];
                 snprintf(label, sizeof(label), "%s%s (%s) [%s]", i == d->selected ? ">" : "  ",
                     d->users[i].name, d->users[i].shell, d->users[i].sudo ? "sudo" : "nosudo");
-                children[1].list.items[i].label = arena_strdup(g_session_arena, label);
+                children[1].u.list.items[i].label = arena_strdup(g_session_arena, label);
             }
             children[1].style_class = "list";
         }
         children[2].type = RNODE_TEXT;
         children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-        children[2].text.content = "A:add  D:delete  Enter:edit  Esc:done";
+        children[2].u.text.content = "A:add  D:delete  Enter:edit  Esc:done";
         children[2].style_class = "text"; children[2].state = "muted";
     } else {
         AddUserState *s = &d->add_state;
@@ -137,28 +139,28 @@ static void um_render(Widget *self, Rect area, RenderTree *out) {
             strcpy(t, text); strcat(t, line);
             free(text); text = t;
         }
-        children[1].text.content = arena_strdup(g_session_arena, text);
+        children[1].u.text.content = arena_strdup(g_session_arena, text);
         free(text);
         children[1].style_class = "text";
 
         if (strlen(s->pass) && strlen(s->confirm_pass) && strcmp(s->pass, s->confirm_pass)) {
             children[2].type = RNODE_TEXT;
             children[2].rect = rect_new(1, box_h - 3, box_w - 2, 1);
-            children[2].text.content = "Passwords do not match!";
+            children[2].u.text.content = "Passwords do not match!";
             children[2].style_class = "text";
         }
         children[3].type = RNODE_TEXT;
         children[3].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-        children[3].text.content = "Tab:next  Enter:save  Esc:cancel";
+        children[3].u.text.content = "Tab:next  Enter:save  Esc:cancel";
         children[3].style_class = "text"; children[3].state = "muted";
     }
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 4;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 4;
 }
 
 static EventResult um_handle(Widget *self, Event *ev, Backend *backend) {

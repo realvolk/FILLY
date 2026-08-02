@@ -20,8 +20,10 @@ typedef struct {
 
 extern Arena *g_session_arena;
 
-static void uf_render(Widget *self, Rect area, RenderTree *out) {
+static void uf_render(Widget *self, RenderTree *out) {
     UFData *d = (UFData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.7f), box_h = (int)(area.h * 0.8f);
@@ -29,23 +31,23 @@ static void uf_render(Widget *self, Rect area, RenderTree *out) {
     int box_x = (area.w - box_w) / 2, box_y = (area.h - box_h) / 2;
     RenderTree *c = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
     c[0].type = RNODE_TEXT; c[0].rect = rect_new(1, 0, box_w - 2, 1);
-    c[0].text.content = arena_strdup(g_session_arena, d->title);
+    c[0].u.text.content = arena_strdup(g_session_arena, d->title);
     c[0].style_class = "text"; c[0].state = "title";
     c[1].type = RNODE_LIST; c[1].rect = rect_new(1, 1, box_w - 2, box_h - 3);
-    c[1].list.item_count = d->count; c[1].list.selected = d->cursor;
-    c[1].list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
+    c[1].u.list.item_count = d->count; c[1].u.list.selected = d->cursor;
+    c[1].u.list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
     for (int i = 0; i < d->count; i++) {
         char label[256];
         snprintf(label, sizeof(label), " %s %s", d->selected[i] ? "[x]" : "[ ]", d->flags[i]);
-        c[1].list.items[i].label = arena_strdup(g_session_arena, label);
+        c[1].u.list.items[i].label = arena_strdup(g_session_arena, label);
     }
     c[1].style_class = "list";
     c[2].type = RNODE_TEXT; c[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    c[2].text.content = "Up/Down:move  Space:toggle  Enter:confirm  Esc:cancel";
+    c[2].u.text.content = "Up/Down:move  Space:toggle  Enter:confirm  Esc:cancel";
     c[2].style_class = "text"; c[2].state = "muted";
     out->type = RNODE_CONTAINER; out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = c; out->container.child_count = 3;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = c; out->u.container.child_count = 3;
 }
 
 static EventResult uf_handle(Widget *self, Event *ev, Backend *backend) {

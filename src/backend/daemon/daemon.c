@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include "core/backend.h"
 #include "backend/terminal/terminal.h"
 extern BackendVTable terminal_vtable;
@@ -264,7 +267,7 @@ void load_plugins(void) {
                 if (sandbox_spawn(full, NULL, NULL, &sh)) { sandbox_get_result(&sh); sandbox_cleanup(&sh); }
                 continue;
             }
-            void *lib = dlopen(full, RTLD_NOW);
+            void *lib = dlopen(full, RTLD_NOW | RTLD_GLOBAL);
             if (lib) {
                 void (*reg)(void (*)(const char *, WidgetFactory));
                 *(void **)(&reg) = dlsym(lib, "register_plugins");
@@ -465,9 +468,26 @@ static void *handle_client(void *arg) {
     cJSON *json = cJSON_Parse(widget_msg);
     if (!json) { free(widget_msg); close(fd); return NULL; }
 
+    cJSON *type_check = cJSON_GetObjectItem(json, "type");
+    cJSON *widget_check = cJSON_GetObjectItem(json, "widget");
+    
+    if (type_check && type_check->valuestring && !widget_check) {
+        /* Non-widget control message (reload_theme, ping, subscribe, etc.) */
+        Session *session = session_create();
+        bool running = true;
+        HeadlessBackend hl;
+        headless_backend_init(&hl, 80, 24);
+        Backend backend = { .vtable = &headless_vtable, .data = &hl };
+        dispatch_message(fd, widget_msg, session, &backend, &running);
+        headless_backend_destroy(&hl);
+        cJSON_Delete(json);
+        free(widget_msg);
+        close(fd);
+        return NULL;
+    }
+
     WidgetRequest *req = widget_request_parse(widget_msg);
-    free(widget_msg);
-    if (!req) { cJSON_Delete(json); send_error(fd, "Invalid widget request"); close(fd); return NULL; }
+    if (!req) { cJSON_Delete(json); free(widget_msg); send_error(fd, "Invalid widget request"); close(fd); return NULL; }
 
     Session *session = session_create();
     if (req->session_id) { Session *s = session_find(req->session_id); if (s) session = s; }
@@ -480,9 +500,9 @@ static void *handle_client(void *arg) {
     if (req->relay) {
         if (sb.tty_fd < 0) {
             const char *tty_path = req->tty ? req->tty : "/dev/tty";
-            if (!tty_is_owned_by_user(tty_path)) { send_error(fd, "Permission denied"); widget_request_free(req); close(fd); return NULL; }
+            if (!tty_is_owned_by_user(tty_path)) { widget_request_free(req); cJSON_Delete(json); free(widget_msg); send_error(fd, "Permission denied"); close(fd); return NULL; }
             sb.tty_fd = open(tty_path, O_RDWR);
-            if (sb.tty_fd < 0) { send_error(fd, "Cannot open /dev/tty"); widget_request_free(req); close(fd); return NULL; }
+            if (sb.tty_fd < 0) { widget_request_free(req); cJSON_Delete(json); free(widget_msg); send_error(fd, "Cannot open /dev/tty"); close(fd); return NULL; }
             struct winsize ws;
             if (ioctl(sb.tty_fd, TIOCGWINSZ, &ws) == 0) { sb.term_w = ws.ws_col; sb.term_h = ws.ws_row; }
         }
@@ -503,6 +523,7 @@ static void *handle_client(void *arg) {
     if (!req->relay) headless_backend_destroy(&hl);
     else { if (sb.tty_raw) tcsetattr(sb.tty_fd, TCSAFLUSH, &sb.orig); if (sb.tty_fd >= 0) close(sb.tty_fd); }
     cJSON_Delete(json);
+    free(widget_msg);
     close(fd);
     return NULL;
 }
@@ -621,7 +642,11 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
     while (daemon_running) {
         time_t now = time(NULL);
         if (now != last_second) { conn_count_this_second = 0; last_second = now; }
-        if (conn_count_this_second >= max_conn) { usleep(100000); continue; }
+        if (conn_count_this_second >= max_conn) {
+            struct timespec ts = {0, 100000000};
+            nanosleep(&ts, NULL);
+            continue;
+        }
 
 #if FILLY_INOTIFY
         if (inotify_fd >= 0) {

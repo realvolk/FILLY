@@ -347,8 +347,8 @@ bool gcore_backend_init(GCoreBackend *g, GCoreOutput output, const char *display
 
 static void free_tree_copy(RenderTree *t) {
     if (!t) return;
-    if (t->type == RNODE_CONTAINER && t->container.children)
-        free(t->container.children);
+    if (t->type == RNODE_CONTAINER && t->u.container.children)
+        free(t->u.container.children);
     free(t);
 }
 
@@ -356,15 +356,15 @@ static RenderTree *copy_tree_malloc(RenderTree *src) {
     if (!src) return NULL;
     RenderTree *dst = malloc(sizeof(RenderTree));
     memcpy(dst, src, sizeof(RenderTree));
-    if (src->type == RNODE_CONTAINER && src->container.child_count > 0) {
-        dst->container.children = malloc(src->container.child_count * sizeof(RenderTree));
-        for (int i = 0; i < src->container.child_count; i++) {
-            RenderTree *child = copy_tree_malloc(&src->container.children[i]);
-            memcpy(&dst->container.children[i], child, sizeof(RenderTree));
+    if (src->type == RNODE_CONTAINER && src->u.container.child_count > 0) {
+        dst->u.container.children = malloc(src->u.container.child_count * sizeof(RenderTree));
+        for (int i = 0; i < src->u.container.child_count; i++) {
+            RenderTree *child = copy_tree_malloc(&src->u.container.children[i]);
+            memcpy(&dst->u.container.children[i], child, sizeof(RenderTree));
             free(child);
         }
     } else {
-        dst->container.children = NULL;
+        dst->u.container.children = NULL;
     }
     return dst;
 }
@@ -381,7 +381,7 @@ void gcore_backend_destroy(GCoreBackend *g) {
     } else if (g->output == GCORE_X11) {
         X11Data *x = g->li_data;
         if (x) {
-            if (x->image) XDestroyImage(x->image);
+            if (x->image) { x->image->data = NULL; XDestroyImage(x->image); }
             if (x->gc) XFreeGC(x->dpy, x->gc);
             if (x->win) XDestroyWindow(x->dpy, x->win);
             if (x->dpy) XCloseDisplay(x->dpy);
@@ -460,10 +460,10 @@ static RenderTree *hit_test(RenderTree *node, int px, int py, int off_x, int off
     if (!node) return NULL;
     int x = off_x + node->rect.x, y = off_y + node->rect.y, w = node->rect.w, h = node->rect.h;
     if (px < x || px >= x + w || py < y || py >= y + h) return NULL;
-    if (node->type == RNODE_CONTAINER && node->container.children) {
-        for (int i = node->container.child_count - 1; i >= 0; i--) {
+    if (node->type == RNODE_CONTAINER && node->u.container.children) {
+        for (int i = node->u.container.child_count - 1; i >= 0; i--) {
             int cx, cy;
-            RenderTree *hit = hit_test(&node->container.children[i], px, py, x, y, &cx, &cy);
+            RenderTree *hit = hit_test(&node->u.container.children[i], px, py, x, y, &cx, &cy);
             if (hit) { if (abs_x) *abs_x = cx; if (abs_y) *abs_y = cy; return hit; }
         }
     }
@@ -476,15 +476,15 @@ static void synthesize_key_events(GCoreBackend *g, RenderTree *hit, int px, int 
     (void)px;
     (void)abs_x;
     if (!hit) return;
-    if (hit->type == RNODE_LIST && hit->list.item_count > 0) {
+    if (hit->type == RNODE_LIST && hit->u.list.item_count > 0) {
         WidgetStyle *s = &hit->resolved_style;
         int item_h = s->font_size + s->padding[0] + s->padding[2];
         if (item_h <= 0) item_h = 20;
         int rel_y = py - abs_y - s->margin[0] - s->padding[0] - s->border_width;
         int idx = rel_y / item_h;
         if (idx < 0) idx = 0;
-        if (idx >= hit->list.item_count) idx = hit->list.item_count - 1;
-        int current = hit->list.selected;
+        if (idx >= hit->u.list.item_count) idx = hit->u.list.item_count - 1;
+        int current = hit->u.list.selected;
         if (idx < current) {
             for (int i = 0; i < current - idx; i++)
                 enqueue_event(g, (Event){ .type = EVENT_KEY, .code = KEY_UP });

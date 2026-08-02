@@ -224,10 +224,10 @@ static Widget *terminal_emulator_ctor(void **a) { char **cmd = (char **)a[1]; re
 static const ParamDesc terminal_emulator_params[] = {{"title",P_STR,"",0},{"command",P_STRS,NULL,0},{"cmd_count",P_INT,NULL,0}};
 
 static Widget *widget_builder_ctor(void **a) { (void)a; return widget_builder_new(); }
-static const ParamDesc widget_builder_params[] = {};
+static const ParamDesc *widget_builder_params = NULL;
 
 static Widget *macro_recorder_ctor(void **a) { (void)a; return macro_recorder_widget_new(); }
-static const ParamDesc macro_recorder_params[] = {};
+static const ParamDesc *macro_recorder_params = NULL;
 
 #define DEF_FACTORY(name, ctor, params, count) static Widget *name##_factory(const WidgetRequest *req) { return generic_factory(req, (RawCtor)ctor, params, count); }
 DEF_FACTORY(menu,menu_ctor,menu_params,5)

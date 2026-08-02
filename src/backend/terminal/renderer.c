@@ -194,6 +194,17 @@ static void draw_calendar(char *buf, int buf_sz, int x, int y, int w,
     }
 }
 
+typedef struct { int depth; TreeNode *node; } Flat;
+
+static void flatten2(TreeNode *n, int c, int d, Flat *flat, int *vis) {
+    for (int i = 0; i < c; i++) {
+        flat[*vis] = (Flat){d, &n[i]};
+        (*vis)++;
+        if (n[i].expanded && n[i].child_count > 0)
+            flatten2((TreeNode *)n[i].children, n[i].child_count, d+1, flat, vis);
+    }
+}
+
 static void render_node(RenderTree *node, int off_x, int off_y,
                         int max_w, int max_h, char *buf, int buf_sz, bool parent_dirty) {
     if (!node || node->rect.w <= 0 || node->rect.h <= 0) return;
@@ -205,118 +216,99 @@ static void render_node(RenderTree *node, int off_x, int off_y,
     if (w <= 0 || h <= 0) return;
     WidgetStyle *ws = &node->resolved_style;
 
-    if (node->resolved_style.opacity < 0.3f) {
-        ws->fg_color = 0;
-        return;
-    }
-    if (node->resolved_style.opacity < 0.7f && node->resolved_style.opacity >= 0.3f) {
-        uint8_t r = (ws->fg_color >> 16) & 0xFF;
-        uint8_t g = (ws->fg_color >> 8) & 0xFF;
-        uint8_t b = ws->fg_color & 0xFF;
-        ws->fg_color = ((r/2) << 16) | ((g/2) << 8) | (b/2) | 0xFF000000;
-    }
-
     switch (node->type) {
     case RNODE_CONTAINER:
-        if (node->container.border != BORDER_NONE) {
-            draw_box(buf, buf_sz, x, y, w, h, node->container.border, ws);
+        if (node->u.container.border != BORDER_NONE) {
+            draw_box(buf, buf_sz, x, y, w, h, node->u.container.border, ws);
             fill_rect(buf, buf_sz, x+1, y+1, w-2, h-2);
         }
-        for (int i = 0; i < node->container.child_count; i++) {
-            RenderTree *child = &node->container.children[i];
-            int cox = x + node->container.padding.left;
-            int coy = y + node->container.padding.top;
-            int cw = w - node->container.padding.left - node->container.padding.right;
-            int ch = h - node->container.padding.top - node->container.padding.bottom;
+        for (int i = 0; i < node->u.container.child_count; i++) {
+            RenderTree *child = &node->u.container.children[i];
+            int cox = x + node->u.container.padding.left;
+            int coy = y + node->u.container.padding.top;
+            int cw = w - node->u.container.padding.left - node->u.container.padding.right;
+            int ch = h - node->u.container.padding.top - node->u.container.padding.bottom;
             render_node(child, cox, coy, cw, ch, buf, buf_sz, self_dirty || parent_dirty);
         }
         break;
     case RNODE_TEXT:
         {
             WidgetStyle local = *ws;
-            local.text_align = node->text.align;
-            draw_text_wrapped(buf, buf_sz, x, y, w, h, node->text.content, &local);
+            local.text_align = node->u.text.align;
+            draw_text_wrapped(buf, buf_sz, x, y, w, h, node->u.text.content, &local);
         }
         break;
     case RNODE_LIST:
-        draw_list(buf, buf_sz, x, y, w, h, node->list.items, node->list.item_count, node->list.selected, ws);
+        draw_list(buf, buf_sz, x, y, w, h, node->u.list.items, node->u.list.item_count, node->u.list.selected, ws);
         break;
     case RNODE_INPUT:
         set_style(buf, buf_sz, ws);
         buf_printf(buf, buf_sz, "\033[%d;%dH", y+1, x+1);
         for (int i = 0; i < w; i++) buf_printf(buf, buf_sz, " ");
         buf_printf(buf, buf_sz, "\033[%d;%dH", y+1, x+1);
-        if (node->input.masked) {
-            int len = node->input.text ? strlen(node->input.text) : 0;
+        if (node->u.input.masked) {
+            int len = node->u.input.text ? strlen(node->u.input.text) : 0;
             for (int i = 0; i < min(len, w-2); i++) buf_printf(buf, buf_sz, "*");
-            if (len == 0) buf_printf(buf, buf_sz, "%s", node->input.placeholder ? node->input.placeholder : "");
+            if (len == 0) buf_printf(buf, buf_sz, "%s", node->u.input.placeholder ? node->u.input.placeholder : "");
         } else {
-            const char *t = node->input.text && strlen(node->input.text) ? node->input.text : (node->input.placeholder ? node->input.placeholder : "");
+            const char *t = node->u.input.text && strlen(node->u.input.text) ? node->u.input.text : (node->u.input.placeholder ? node->u.input.placeholder : "");
             buf_printf(buf, buf_sz, "> %.*s", w-4, t);
         }
         set_style(buf, buf_sz, NULL);
         break;
     case RNODE_CHECKBOX:
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, "\033[%d;%dH%s %s", y+1, x+1, node->checkbox.checked ? "[x]" : "[ ]", node->checkbox.label);
+        buf_printf(buf, buf_sz, "\033[%d;%dH%s %s", y+1, x+1, node->u.checkbox.checked ? "[x]" : "[ ]", node->u.checkbox.label);
         set_style(buf, buf_sz, NULL);
         break;
     case RNODE_TOGGLE:
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, "\033[%d;%dH[ %s ] %s", y+1, x+1, node->toggle.value ? "ON" : "OFF", node->toggle.label);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[ %s ] %s", y+1, x+1, node->u.toggle.value ? "ON" : "OFF", node->u.toggle.label);
         set_style(buf, buf_sz, NULL);
         break;
     case RNODE_SPINNER: {
         const char *frames[] = {"⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"};
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, "\033[%d;%dH%s %s", y+1, x+1, frames[node->spinner.frame % 10], node->spinner.message);
+        buf_printf(buf, buf_sz, "\033[%d;%dH%s %s", y+1, x+1, frames[node->u.spinner.frame % 10], node->u.spinner.message);
         set_style(buf, buf_sz, NULL);
         break;
     }
     case RNODE_SEPARATOR:
-        if (node->separator.orientation == ORIENT_HORIZONTAL)
+        if (node->u.separator.orientation == ORIENT_HORIZONTAL)
             for (int i = 0; i < w; i++) buf_printf(buf, buf_sz, "\033[%d;%dH─", y+1, x+i+1);
         else
             for (int i = 0; i < h; i++) buf_printf(buf, buf_sz, "\033[%d;%dH│", y+i+1, x+1);
         break;
     case RNODE_BADGE:
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, "\033[%d;%dH%s", y+1, x+1, node->badge.text);
+        buf_printf(buf, buf_sz, "\033[%d;%dH%s", y+1, x+1, node->u.badge.text);
         set_style(buf, buf_sz, NULL);
         break;
     case RNODE_CURSOR:
-        buf_printf(buf, buf_sz, "\033[%d;%dH\033[7m \033[0m", y + node->cursor.y + 1, x + node->cursor.x + 1);
+        buf_printf(buf, buf_sz, "\033[%d;%dH\033[7m \033[0m", y + node->u.cursor.y + 1, x + node->u.cursor.x + 1);
         break;
     case RNODE_TABLE:
         buf_printf(buf, buf_sz, "\033[%d;%dH", y+1, x+1);
         set_style(buf, buf_sz, ws);
-        for (int i = 0; i < node->table.header_count; i++) buf_printf(buf, buf_sz, "%-20s", node->table.headers[i]);
+        for (int i = 0; i < node->u.table.header_count; i++) buf_printf(buf, buf_sz, "%-20s", node->u.table.headers[i]);
         set_style(buf, buf_sz, NULL);
-        for (int r = 0; r < node->table.row_count && r < h-1; r++) {
+        for (int r = 0; r < node->u.table.row_count && r < h-1; r++) {
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+r+2, x+1);
-            bool sel = (node->table.selected_row == r);
+            bool sel = (node->u.table.selected_row == r);
             if (sel) {
                 buf_printf(buf, buf_sz, "\033[48;2;%d;%d;%dm\033[38;2;255;255;255m",
                     (ws->accent_color>>16)&0xFF, (ws->accent_color>>8)&0xFF, ws->accent_color&0xFF);
             }
-            for (int c = 0; c < node->table.header_count; c++)
-                buf_printf(buf, buf_sz, "%-20s", node->table.rows[r][c]);
+            for (int c = 0; c < node->u.table.header_count; c++)
+                buf_printf(buf, buf_sz, "%-20s", node->u.table.rows[r][c]);
             set_style(buf, buf_sz, NULL);
         }
         break;
     case RNODE_TREE: {
-        int vis = 0;
-        typedef struct { int depth; TreeNode *node; } Flat;
         Flat flat[256];
-        void flatten2(TreeNode *n, int c, int d) {
-            for (int i = 0; i < c; i++) {
-                flat[vis++] = (Flat){d, &n[i]};
-                if (n[i].expanded && n[i].child_count > 0)
-                    flatten2((TreeNode *)n[i].children, n[i].child_count, d+1);
-            }
-        }
-        flatten2(node->tree.nodes, node->tree.node_count, 0);
-        int scroll = 0, s = node->tree.selected_path ? node->tree.selected_path[0] : 0;
+        int vis = 0;
+        flatten2(node->u.tree.nodes, node->u.tree.node_count, 0, flat, &vis);
+        int scroll = 0, s = node->u.tree.selected_path ? node->u.tree.selected_path[0] : 0;
         if (s >= h) scroll = s - h + 1;
         for (int i = 0; i < h && i + scroll < vis; i++) {
             Flat *f = &flat[i + scroll];
@@ -331,70 +323,70 @@ static void render_node(RenderTree *node, int off_x, int off_y,
     }
     case RNODE_GAUGE:
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, "\033[%d;%dH%s %d%%", y+1, x+1, node->gauge.label, node->gauge.percent);
+        buf_printf(buf, buf_sz, "\033[%d;%dH%s %d%%", y+1, x+1, node->u.gauge.label, node->u.gauge.percent);
         buf_printf(buf, buf_sz, "\033[%d;%dH", y+2, x+1);
-        { int f = (w * node->gauge.percent) / 100;
+        { int f = (w * node->u.gauge.percent) / 100;
         for (int i = 0; i < f; i++) buf_printf(buf, buf_sz, "=");
         for (int i = f; i < w; i++) buf_printf(buf, buf_sz, "-"); }
         set_style(buf, buf_sz, NULL);
         break;
     case RNODE_CALENDAR:
-        draw_calendar(buf, buf_sz, x, y, w, node->calendar.year, node->calendar.month, node->calendar.selected_day, ws);
+        draw_calendar(buf, buf_sz, x, y, w, node->u.calendar.year, node->u.calendar.month, node->u.calendar.selected_day, ws);
         break;
     case RNODE_FORM:
-        for (int i = 0; i < node->form.field_count && i < h; i++) {
+        for (int i = 0; i < node->u.form.field_count && i < h; i++) {
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+1+i, x+1);
             set_style(buf, buf_sz, ws);
-            buf_printf(buf, buf_sz, "%s: %s", node->form.fields[i].label, node->form.fields[i].value);
+            buf_printf(buf, buf_sz, "%s: %s", node->u.form.fields[i].label, node->u.form.fields[i].value);
             set_style(buf, buf_sz, NULL);
         }
-        if (node->form.field_count < h) {
-            buf_printf(buf, buf_sz, "\033[%d;%dH", y + node->form.field_count + 1, x+1);
+        if (node->u.form.field_count < h) {
+            buf_printf(buf, buf_sz, "\033[%d;%dH", y + node->u.form.field_count + 1, x+1);
             set_style(buf, buf_sz, ws);
-            buf_printf(buf, buf_sz, "[ %s ]", node->form.submit_label);
+            buf_printf(buf, buf_sz, "[ %s ]", node->u.form.submit_label);
             set_style(buf, buf_sz, NULL);
         }
         break;
     case RNODE_TABS: {
         int lw = 0;
-        for (int i = 0; i < node->tabs.tab_count; i++) {
+        for (int i = 0; i < node->u.tabs.tab_count; i++) {
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+1, x+1+lw);
             set_style(buf, buf_sz, ws);
-            buf_printf(buf, buf_sz, i == node->tabs.active ? "[ %s ]" : "  %s  ", node->tabs.tab_labels[i]);
+            buf_printf(buf, buf_sz, i == node->u.tabs.active ? "[ %s ]" : "  %s  ", node->u.tabs.tab_labels[i]);
             set_style(buf, buf_sz, NULL);
-            lw += strlen(node->tabs.tab_labels[i]) + 4;
+            lw += strlen(node->u.tabs.tab_labels[i]) + 4;
         }
-        if (node->tabs.child && h > 1)
-            render_node(node->tabs.child, x, y+1, w, h-1, buf, buf_sz, self_dirty || parent_dirty);
+        if (node->u.tabs.child && h > 1)
+            render_node(node->u.tabs.child, x, y+1, w, h-1, buf, buf_sz, self_dirty || parent_dirty);
         break;
     }
     case RNODE_SPLIT_PANES: {
-        int sp = node->split_panes.split_position > 0 ? node->split_panes.split_position :
-                  (node->split_panes.orientation == ORIENT_HORIZONTAL ? w/2 : h/2);
-        if (node->split_panes.orientation == ORIENT_HORIZONTAL) {
-            render_node(node->split_panes.first, x, y, sp, h, buf, buf_sz, self_dirty || parent_dirty);
+        int sp = node->u.split_panes.split_position > 0 ? node->u.split_panes.split_position :
+                  (node->u.split_panes.orientation == ORIENT_HORIZONTAL ? w/2 : h/2);
+        if (node->u.split_panes.orientation == ORIENT_HORIZONTAL) {
+            render_node(node->u.split_panes.first, x, y, sp, h, buf, buf_sz, self_dirty || parent_dirty);
             for (int iy = 0; iy < h; iy++) buf_printf(buf, buf_sz, "\033[%d;%dH│", y+1+iy, x+sp+1);
-            render_node(node->split_panes.second, x+sp+1, y, w-sp-1, h, buf, buf_sz, self_dirty || parent_dirty);
+            render_node(node->u.split_panes.second, x+sp+1, y, w-sp-1, h, buf, buf_sz, self_dirty || parent_dirty);
         } else {
-            render_node(node->split_panes.first, x, y, w, sp, buf, buf_sz, self_dirty || parent_dirty);
+            render_node(node->u.split_panes.first, x, y, w, sp, buf, buf_sz, self_dirty || parent_dirty);
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+sp+1, x+1);
             for (int ix = 0; ix < w; ix++) buf_printf(buf, buf_sz, "─");
-            render_node(node->split_panes.second, x, y+sp+1, w, h-sp-1, buf, buf_sz, self_dirty || parent_dirty);
+            render_node(node->u.split_panes.second, x, y+sp+1, w, h-sp-1, buf, buf_sz, self_dirty || parent_dirty);
         }
         break;
     }
     case RNODE_CONTEXT_MENU:
-        for (int i = 0; i < node->context_menu.item_count && i < h; i++) {
+        for (int i = 0; i < node->u.context_menu.item_count && i < h; i++) {
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+1+i, x+1);
             set_style(buf, buf_sz, ws);
-            buf_printf(buf, buf_sz, " %s ", node->context_menu.items[i].label);
+            buf_printf(buf, buf_sz, " %s ", node->u.context_menu.items[i].label);
             set_style(buf, buf_sz, NULL);
         }
         break;
     case RNODE_TOAST:
         buf_printf(buf, buf_sz, "\033[%d;%dH", y+h-1, x+1);
         set_style(buf, buf_sz, ws);
-        buf_printf(buf, buf_sz, " %s ", node->toast.message);
+        buf_printf(buf, buf_sz, " %s ", node->u.toast.message);
         set_style(buf, buf_sz, NULL);
         break;
     }

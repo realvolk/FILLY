@@ -69,15 +69,15 @@ void resolve_node_styles(RenderTree *node, Theme *theme) {
     }
 
     if (node->type == RNODE_CONTAINER) {
-        for (int i = 0; i < node->container.child_count; i++)
-            resolve_node_styles(&node->container.children[i], theme);
+        for (int i = 0; i < node->u.container.child_count; i++)
+            resolve_node_styles(&node->u.container.children[i], theme);
     }
-    if (node->type == RNODE_TABS && node->tabs.child)
-        resolve_node_styles(node->tabs.child, theme);
+    if (node->type == RNODE_TABS && node->u.tabs.child)
+        resolve_node_styles(node->u.tabs.child, theme);
     if (node->type == RNODE_SPLIT_PANES) {
-        if (node->split_panes.first) resolve_node_styles(node->split_panes.first, theme);
-        if (node->split_panes.second) resolve_node_styles(node->split_panes.second, theme);
-        if (node->split_panes.third) resolve_node_styles(node->split_panes.third, theme);
+        if (node->u.split_panes.first) resolve_node_styles(node->u.split_panes.first, theme);
+        if (node->u.split_panes.second) resolve_node_styles(node->u.split_panes.second, theme);
+        if (node->u.split_panes.third) resolve_node_styles(node->u.split_panes.third, theme);
     }
 }
 
@@ -85,8 +85,8 @@ void render_tree_mark_dirty(RenderTree *tree) {
     if (!tree) return;
     tree->dirty = true;
     if (tree->type == RNODE_CONTAINER) {
-        for (int i = 0; i < tree->container.child_count; i++)
-            render_tree_mark_dirty(&tree->container.children[i]);
+        for (int i = 0; i < tree->u.container.child_count; i++)
+            render_tree_mark_dirty(&tree->u.container.children[i]);
     }
 }
 

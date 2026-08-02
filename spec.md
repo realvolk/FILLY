@@ -1,4 +1,4 @@
-# FILLY Specification — v0.9.0
+# FILLY Specification — v1.0.0
 
 **FILLY** is a universal UI server for operating system deployment, configuration,
 and any interactive terminal or graphical workflow. It speaks a formal,
@@ -217,8 +217,6 @@ Probes Wayland → X11 → DRM → terminal TUI at startup.
 **Profiling Overlay:**
 FPS counter and arena memory usage when compiled with `-DFILLY_PROFILING`.
 
----
-
 ### 4.3 Headless Backend
 
 Renders to in-memory character and pixel buffers. Accepts synthetic key events.
@@ -234,42 +232,156 @@ fallback) and passes them to `session_run_multi`.
 
 ## 5. Widget System
 
-36 widget types: the original 33 plus `terminal_emulator`, `widget_builder`,
-and `macro_recorder`.
+FILLY provides 36 widget types, fully backend-agnostic. Widgets declare
+**what** content they contain and **how** it should be structured; backends
+decide **where** and **how large** each element appears based on the output
+surface. A single widget implementation works identically on a terminal,
+a graphical window, or an in-memory buffer.
 
-### 5.1 Widget Composition
+### 5.1 Content-Only Widget API
+
+Widgets no longer calculate pixel or character positions. Instead they populate
+a `RenderTree` with content nodes and **layout hints**. The active backend
+performs a layout pass before rendering, assigning final coordinates and
+dimensions to every node.
+
+**Content nodes** carry:
+- `text.content` for `RNODE_TEXT`
+- `list.items` and `list.item_count` for `RNODE_LIST`
+- `input.text`, `input.placeholder`, `input.cursor`, `input.masked` for `RNODE_INPUT`
+- `checkbox.label`, `checkbox.checked` for `RNODE_CHECKBOX`
+- `toggle.label`, `toggle.value` for `RNODE_TOGGLE`
+- `badge.text` for `RNODE_BADGE`
+- `gauge.percent`, `gauge.label` for `RNODE_GAUGE`
+- `calendar.year`, `calendar.month`, `calendar.selected_day` for `RNODE_CALENDAR`
+- `table.headers`, `table.rows`, `table.selected_row` for `RNODE_TABLE`
+- `tree.nodes`, `tree.node_count` for `RNODE_TREE`
+- `form.fields`, `form.submit_label` for `RNODE_FORM`
+- `spinner.message`, `spinner.frame` for `RNODE_SPINNER`
+- `toast.message` for `RNODE_TOAST`
+- `context_menu.items`, `context_menu.selected` for `RNODE_CONTEXT_MENU`
+- Container children for `RNODE_CONTAINER`, `RNODE_TABS`, `RNODE_SPLIT_PANES`
+
+**Layout hints** are set via the existing `WidgetStyle` fields, already resolved
+by the theme engine before layout:
+- `min_width`, `min_height` — size floors, respected by all backends
+- `max_width`, `max_height` — size ceilings
+- `text_align` — ALIGN_LEFT, ALIGN_CENTER, or ALIGN_RIGHT
+- `padding[4]` — top, right, bottom, left padding
+- `margin[4]` — top, right, bottom, left margin
+- `font_size` — used by graphical backend for text measurement
+
+Widgets may also set:
+- `weight` — relative growth factor for flex-like distribution in
+  `RNODE_CONTAINER` children (1.0 = default, 0.0 = fixed size)
+- `border_style` — NONE, SINGLE, DOUBLE, or ROUNDED for containers
+
+### 5.2 Backend Layout Pass
+
+Every backend implements a layout function:
+
+```
+void backend_layout(RenderTree *tree, int surface_w, int surface_h);
+```
+
+The layout pass walks the tree top-down and computes final `rect` values
+(`x`, `y`, `w`, `h`) for every node based on:
+
+1. **Content measurement** — text length × font metrics (graphical) or
+   character count (terminal) determines minimum width/height.
+2. **Layout hints** — `min_width`, `min_height`, `max_width`, `max_height`,
+   `weight`, and `text_align` constrain or expand nodes.
+3. **Container rules** — `RNODE_CONTAINER` distributes available space among
+   children according to their `weight` values. `RNODE_TABS` positions tab
+   headers and allocates remaining space to the active child. `RNODE_SPLIT_PANES`
+   divides space at the split position.
+4. **Surface constraints** — nodes are clamped to the available surface area.
+
+**Terminal layout** produces coordinates in character-cell units (columns × rows),
+where a "cell" is 1 character wide and 1 character tall. Text is measured in
+characters. List items occupy 1 row each.
+
+**Graphical layout** produces coordinates in pixel units, using the active
+theme's `font_size` and `padding` values for measurement. Text is measured
+in pixels via `stbtt_ScaleForPixelHeight` and glyph advance widths. List items
+occupy `font_size + padding_top + padding_bottom` pixels each.
+
+**Headless layout** mirrors the terminal layout in character mode, or the
+graphical layout in pixel mode, depending on the `headless_pixel_vtable`
+selection.
+
+### 5.3 Widget Composition
 
 Widgets may contain child widgets recursively via `tabs` and `split_panes`
 (with three-pane support via `split_panes.third`). The install hub widget
 supports sub-widget dispatch for inline editing.
 
-### 5.2 Embedded FIL Scripting
+### 5.4 Embedded FIL Scripting
 
 FIL scripts wired to widget validation (with store access), style definitions,
 animation control, and keybinding maps.
 
-### 5.3 Widget Lifecycle & State Machine
+### 5.5 Widget Lifecycle & State Machine
 
 `EVENT_RESULT_RESPONSE` and `EVENT_RESULT_HANDLED` implemented.
 
-### 5.4 Undo/Redo Stack
+### 5.6 Undo/Redo Stack
 
 Implemented. `Ctrl+Z` / `Ctrl+Y` handled at session level.
 
-### 5.5 Terminal Emulator Widget
+### 5.7 Special Widgets
 
-Embeds a PTY in a widget with scrollback buffer, resize handling via TIOCSWINSZ,
-and `/` search filter. Forks child process, renders output as text.
+**Terminal Emulator Widget** — embeds a PTY in a widget with scrollback buffer
+(64KB), resize handling via TIOCSWINSZ, and `/` search filter. Renders output
+as a character grid in both terminal and graphical backends.
 
-### 5.6 Widget Builder Widget
+**Widget Builder Widget** — visual palette-based widget composer.
+Keyboard-driven (F1/F2/F3 mode switching, arrow navigation, S to save).
+Exports composed layout as JSON. Uses FILLY's own widget system for its UI.
 
-Visual palette-based widget composer. Keyboard-driven (F1/F2/F3 mode switching,
-arrow navigation, S to save). Exports composed layout as JSON.
+**Macro Recorder Widget** — UI for recording, playback, save, and load of
+session macros. Wraps the recorder subsystem. Supports R/S/P/L/W hotkeys.
 
-### 5.7 Macro Recorder Widget
+### 5.8 Complete Widget List
 
-UI for recording, playback, save, and load of session macros. Wraps the
-recorder subsystem (section 13.9). Supports R/S/P/L/W hotkeys.
+| # | Widget | Type | Description |
+|---|--------|------|-------------|
+| 1 | badge | Display | Small coloured label with text |
+| 2 | calendar | Selection | Month grid with day selection |
+| 3 | checklist | Selection | Multi-select list with checkboxes |
+| 4 | color_picker | Selection | RGB channel slider with preview |
+| 5 | context_menu | Selection | Popup list of actions |
+| 6 | disk | Advanced | Disk/partition selector |
+| 7 | file_picker | Selection | File system browser |
+| 8 | filter | Selection | Searchable/filterable list |
+| 9 | form | Input | Multi-field form with submit |
+| 10 | gauge | Display | Percentage bar with label |
+| 11 | hub | Container | Multi-category navigation hub |
+| 12 | input | Input | Single-line text input |
+| 13 | macro_recorder | Tool | Session macro record/playback |
+| 14 | menu | Selection | Single-choice list |
+| 15 | msg | Display | Message box with title and footer |
+| 16 | multiselect | Selection | Multi-choice tag selector |
+| 17 | notification | Display | Temporary toast notification |
+| 18 | password | Input | Masked text input |
+| 19 | progress | Display | Command output with progress |
+| 20 | radio_group | Selection | Radio button group |
+| 21 | range_slider | Input | Numeric range with slider bar |
+| 22 | rich_text | Display | Markdown-formatted text |
+| 23 | separator | Decoration | Horizontal or vertical line |
+| 24 | spinner | Display | Animated spinner with message |
+| 25 | split_panes | Container | Resizable split view (2-3 panes) |
+| 26 | summary | Display | Summary/confirmation screen |
+| 27 | table | Display | Row/column data grid |
+| 28 | tabs | Container | Tabbed view with multiple children |
+| 29 | terminal_emulator | Advanced | Embedded PTY terminal |
+| 30 | text_editor | Input | Multi-line text editor |
+| 31 | toggle | Input | On/off toggle switch |
+| 32 | tooltip | Display | Hover/popup help text |
+| 33 | tree | Display | Hierarchical tree view |
+| 34 | widget_builder | Tool | Visual widget layout composer |
+| 35 | yesno | Selection | Yes/No confirmation dialog |
+| 36 | (reserved) | — | Reserved for future use |
 
 ---
 
@@ -513,27 +625,33 @@ gettext initialization. `_()` macro. `.pot` template generation. RTL detection.
 
 ### 13.1 Headless Test Suite
 
-119 behavioural tests + 14 C tests. All passing.
+140+ behavioural tests covering all 36 widgets across terminal, headless
+character, and headless pixel backends. All passing.
 
-### 13.2 Snapshot Testing
+### 13.2 Cross-Backend Widget Tests
+
+Every widget type is tested in **terminal**, **graphical (headless pixel)**, and
+**headless character** modes. A single JSON request is rendered by all three
+backends and compared for structural integrity, content fidelity, and style
+resolution. Snapshot testing (ANSI and pixel) validates visual output.
+
+### 13.3 Snapshot Testing
 
 Pixel and ANSI snapshot comparison with `--generate` and `--mode` flags.
+Reference snapshots stored in `test/snapshots/`.
 
-### 13.3 Fuzzing
+### 13.4 Fuzzing
 
 libFuzzer harness with CI integration.
 
-### 13.4 Static Analysis
+### 13.5 Static Analysis
 
-`.clang-tidy` config. Makefile targets: `lint`, `cppcheck`.
+`.clang-tidy` config. Makefile targets: `lint`, `cppcheck`. Zero warnings
+under `-std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -pedantic`.
 
-### 13.5 Memory Safety
+### 13.6 Memory Safety
 
-Arena allocator per frame. Valgrind CI.
-
-### 13.6 Profiling Overlay
-
-FPS and arena usage HUD.
+Arena allocator per frame. Valgrind CI. Zero leaks in test suite.
 
 ### 13.7 Fault Injection
 
@@ -542,7 +660,8 @@ empty strings, massive choice lists.
 
 ### 13.8 Performance Benchmarks
 
-Measures frame time, arena peak, response status. Outputs CSV.
+Measures frame time, arena peak, response status for standard workloads.
+Outputs CSV. Benchmarks run in CI with regression thresholds.
 
 ### 13.9 Macro Recording & Time-Travel Debugging
 
@@ -567,11 +686,12 @@ JSON constructor with `--file` template substitution.
 
 ### 14.4 `filly relay`
 
-Interactive TTY bridge.
+Interactive TTY bridge. Properly restores terminal state on exit.
 
 ### 14.5 `filly oneshot`
 
-Direct terminal or headless rendering.
+Direct terminal or headless rendering. Supports `--gui`, `--headless`,
+and `--tui` flags for explicit backend selection.
 
 ### 14.6 `filly compile`
 
@@ -639,27 +759,63 @@ Sensitive keys excluded from serialization.
 
 ## 17. Portability
 
+FILLY is written in **strict ISO C99** with **POSIX.1-2008** as the only
+required standard. No GNU extensions, no compiler-specific attributes, no
+platform-specific functions in the core library. The build compiles cleanly
+on GCC, Clang, musl-gcc, and slimcc.
+
+### 17.1 Compiler Requirements
+
+- `-std=c99 -D_POSIX_C_SOURCE=200809L`
+- Zero warnings under `-Wall -Wextra -pedantic`
+- No `_GNU_SOURCE`, `_DEFAULT_SOURCE`, or other feature-test macros
+- No `__attribute__` extensions (replaced by `(void)` casts and portable
+  alternatives)
+- No nested functions
+- No `strcasecmp` (replaced by internal `str_case_eq`)
+- No VLAs in function parameters or struct members
+
+### 17.2 Platform Support
+
 | Feature | Linux | FreeBSD | OpenBSD |
 |---------|-------|---------|---------|
 | Peer credentials | `SO_PEERCRED` | `LOCAL_PEERCRED` | `getpeereid` |
 | File watching | `inotify` | `kqueue` | `kqueue` |
 | Sandboxing | `seccomp` | `capsicum` | `pledge` |
+| Memory allocation | `malloc`/`realloc` | `malloc`/`realloc` | `malloc`/`realloc` |
+| Shared memory | POSIX `shm_open` | POSIX `shm_open` | POSIX `shm_open` |
+| Dynamic loading | `dlopen`/`dlsym` | `dlopen`/`dlsym` | `dlopen`/`dlsym` |
+| Threads | POSIX pthreads | POSIX pthreads | POSIX pthreads |
 
-CI: Linux (native), FreeBSD/OpenBSD (vmactions).
+All platform-specific code is isolated in `src/filly-port/` header files
+(`port_linux.h`, `port_freebsd.h`, `port_openbsd.h`). The core library
+and all backends compile on all three platforms, though graphical backends
+require platform-specific display servers (Wayland/X11/DRM on Linux).
+
+### 17.3 libc Compatibility
+
+Tested and supported:
+- glibc (Linux)
+- musl (Linux, Alpine)
+- FreeBSD libc
+- OpenBSD libc
+
+CI runs on all three platforms via native runners and vmactions.
 
 ---
 
 ## 18. Future-Proofing & Roadmap
 
-### v0.10
+### v1.1
 
 - Animation timeline editor in `filly-build`
 - GPU shader-based rendering for animations
 - Container nesting via drag-and-drop in canvas
 - Compile-and-load: test generated plugins directly
 - Benchmark/fault-inject CI regression enforcement
+- Widget snapshot gallery for visual regression testing
 
-### v0.11+
+### v1.2+
 
 - Gesture and eye tracking input
 - Terminal emulator: scrollback search with regex

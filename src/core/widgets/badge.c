@@ -5,12 +5,17 @@
 
 typedef struct { WidgetBase base; char *text; } BadgeData;
 
-static void badge_render(Widget *self, Rect area, RenderTree *out) {
+static void badge_render(Widget *self, RenderTree *out) {
     BadgeData *d = (BadgeData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->type = RNODE_BADGE;
-    out->rect = area;
-    out->badge.text = d->text;
+    int is_gui = (area.w > 200);
+    int ch = is_gui ? 34 : 1;
+    int text_w = is_gui ? (int)strlen(d->text) * 14 + 24 : (int)strlen(d->text) + 4;
+    out->rect = rect_new(0, 0, text_w, ch);
+    out->u.badge.text = d->text;
     out->style_class = "badge";
 }
 

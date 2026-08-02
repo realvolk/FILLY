@@ -251,7 +251,7 @@ static void hub_enter_edit(HubData *d, HubItem *item) {
 }
 
 static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
-    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) { d->sub_widget->vtable.render(d->sub_widget, area, out); return; }
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) { d->sub_widget->vtable.render(d->sub_widget, out); return; }
     int ow = (int)(area.w * 0.55f), oh = (int)(area.h * 0.60f);
     if (ow > area.w - 4) ow = area.w - 4; if (oh > area.h - 4) oh = area.h - 4;
     int ox = (area.w - ow) / 2, oy = (area.h - oh) / 2;
@@ -265,117 +265,119 @@ static void hub_render_overlay(HubData *d, Rect area, RenderTree *out) {
     case HUB_EDITING_MENU: {
         child_count = 3 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int list_y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 1, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; list_y = 1 + msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 1, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; list_y = 1 + msg_h; }
         children[ci].type = RNODE_LIST; children[ci].rect = rect_new(1, list_y, ow - 2, oh - list_y - 2);
-        children[ci].list.item_count = item ? item->choice_count : 0; children[ci].list.selected = d->edit_selected;
-        children[ci].list.items = arena_alloc(g_session_arena, (item ? item->choice_count : 0) * sizeof(ListItem));
-        if (item) for (int i = 0; i < item->choice_count; i++) children[ci].list.items[i].label = arena_strdup(g_session_arena, item->choices[i]);
+        children[ci].u.list.item_count = item ? item->choice_count : 0; children[ci].u.list.selected = d->edit_selected;
+        children[ci].u.list.items = arena_alloc(g_session_arena, (item ? item->choice_count : 0) * sizeof(ListItem));
+        if (item) for (int i = 0; i < item->choice_count; i++) children[ci].u.list.items[i].label = arena_strdup(g_session_arena, item->choices[i]);
         children[ci].style_class = "list"; ci++;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = "Up/Down:move  Enter:select  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = "Up/Down:move  Enter:select  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     case HUB_EDITING_INPUT: {
         child_count = 3 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int input_y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 1, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; input_y = 1 + msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 1, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; input_y = 1 + msg_h; }
         children[ci].type = RNODE_INPUT; children[ci].rect = rect_new(1, input_y, ow - 2, 1);
-        children[ci].input.text = arena_strdup(g_session_arena, d->edit_text ? d->edit_text : ""); children[ci].input.cursor = d->edit_cursor;
-        children[ci].input.placeholder = arena_strdup(g_session_arena, item && item->placeholder ? item->placeholder : ""); children[ci].style_class = "input"; ci++;
+        children[ci].u.input.text = arena_strdup(g_session_arena, d->edit_text ? d->edit_text : ""); children[ci].u.input.cursor = d->edit_cursor;
+        children[ci].u.input.placeholder = arena_strdup(g_session_arena, item && item->placeholder ? item->placeholder : ""); children[ci].style_class = "input"; ci++;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = "Enter:confirm  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = "Enter:confirm  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     case HUB_EDITING_PASSWORD: {
         child_count = 4 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
         char mask1[128] = {0}; for (int j = 0; j < (int)strlen(d->edit_pass1) && j < 127; j++) mask1[j] = '*';
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, 1);
-        char buf[256]; snprintf(buf, sizeof(buf), "Password: %s", mask1); children[ci].text.content = arena_strdup(g_session_arena, buf);
+        char buf[256]; snprintf(buf, sizeof(buf), "Password: %s", mask1); children[ci].u.text.content = arena_strdup(g_session_arena, buf);
         children[ci].style_class = "text"; ci++; y++;
         char mask2[128] = {0}; for (int j = 0; j < (int)strlen(d->edit_pass2) && j < 127; j++) mask2[j] = '*';
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, 1);
-        snprintf(buf, sizeof(buf), "Confirm:  %s", mask2); children[ci].text.content = arena_strdup(g_session_arena, buf);
+        snprintf(buf, sizeof(buf), "Confirm:  %s", mask2); children[ci].u.text.content = arena_strdup(g_session_arena, buf);
         children[ci].style_class = "text"; ci++; y++;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = "Tab:next  Enter:submit  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = "Tab:next  Enter:submit  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     case HUB_EDITING_YESNO: {
         child_count = 3 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
         char yesno_text[64]; snprintf(yesno_text, sizeof(yesno_text), "[ %s ]  [ %s ]", d->edit_yes ? "Yes" : "yes", d->edit_yes ? "no" : "No");
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y + 1, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, yesno_text); children[ci].style_class = "text"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, yesno_text); children[ci].style_class = "text"; ci++;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = "Left/Right:choose  Enter:confirm  y/n:quick  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = "Left/Right:choose  Enter:confirm  y/n:quick  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     case HUB_EDITING_FILTER: {
         child_count = 4 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
         children[ci].type = RNODE_INPUT; children[ci].rect = rect_new(1, y, ow - 2, 1);
         char qd[256]; snprintf(qd, sizeof(qd), "> %s", d->edit_query ? d->edit_query : "");
-        children[ci].input.text = arena_strdup(g_session_arena, qd); children[ci].input.cursor = strlen(qd);
-        children[ci].input.placeholder = "Type to filter..."; children[ci].style_class = "input"; ci++; y++;
+        children[ci].u.input.text = arena_strdup(g_session_arena, qd); children[ci].u.input.cursor = strlen(qd);
+        children[ci].u.input.placeholder = "Type to filter..."; children[ci].style_class = "input"; ci++; y++;
         children[ci].type = RNODE_LIST; children[ci].rect = rect_new(1, y, ow - 2, oh - y - 2);
-        children[ci].list.item_count = d->edit_filtered_count; children[ci].list.selected = d->edit_selected;
-        children[ci].list.items = arena_alloc(g_session_arena, d->edit_filtered_count * sizeof(ListItem));
-        for (int i = 0; i < d->edit_filtered_count; i++) children[ci].list.items[i].label = arena_strdup(g_session_arena, item->choices[d->edit_filtered[i]]);
+        children[ci].u.list.item_count = d->edit_filtered_count; children[ci].u.list.selected = d->edit_selected;
+        children[ci].u.list.items = arena_alloc(g_session_arena, d->edit_filtered_count * sizeof(ListItem));
+        for (int i = 0; i < d->edit_filtered_count; i++) children[ci].u.list.items[i].label = arena_strdup(g_session_arena, item->choices[d->edit_filtered[i]]);
         children[ci].style_class = "list"; ci++;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = "Type:filter  Up/Down:move  Enter:select  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = "Type:filter  Up/Down:move  Enter:select  Esc:cancel"; children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     case HUB_EDITING_MULTISELECT: {
         child_count = 4 + (msg_h > 0 ? 1 : 0); children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree)); int ci = 0;
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, 0, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
+        children[ci].u.text.content = arena_strdup(g_session_arena, item ? item->label : ""); children[ci].style_class = "text"; children[ci].state = "title"; ci++;
         int y = 1;
-        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
+        if (msg_h > 0) { children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, y, ow - 2, msg_h); children[ci].u.text.content = arena_strdup(g_session_arena, msg); children[ci].style_class = "text"; ci++; y += msg_h; }
         children[ci].type = RNODE_INPUT; children[ci].rect = rect_new(1, y, ow - 2, 1);
         char qd2[256]; snprintf(qd2, sizeof(qd2), "> %s", d->edit_query ? d->edit_query : "");
-        children[ci].input.text = arena_strdup(g_session_arena, qd2); children[ci].input.cursor = strlen(qd2);
-        children[ci].input.placeholder = "Type to filter..."; children[ci].style_class = "input"; ci++; y++;
+        children[ci].u.input.text = arena_strdup(g_session_arena, qd2); children[ci].u.input.cursor = strlen(qd2);
+        children[ci].u.input.placeholder = "Type to filter..."; children[ci].style_class = "input"; ci++; y++;
         children[ci].type = RNODE_LIST; children[ci].rect = rect_new(1, y, ow - 2, oh - y - 2);
-        children[ci].list.item_count = d->edit_filtered_count; children[ci].list.selected = d->edit_selected;
-        children[ci].list.items = arena_alloc(g_session_arena, d->edit_filtered_count * sizeof(ListItem));
+        children[ci].u.list.item_count = d->edit_filtered_count; children[ci].u.list.selected = d->edit_selected;
+        children[ci].u.list.items = arena_alloc(g_session_arena, d->edit_filtered_count * sizeof(ListItem));
         for (int i = 0; i < d->edit_filtered_count; i++) {
             int orig = d->edit_filtered[i]; char label[512];
             snprintf(label, sizeof(label), "%s %s", d->edit_selected_set[orig] ? "[x]" : "[ ]", item->choices[orig]);
-            children[ci].list.items[i].label = arena_strdup(g_session_arena, label);
+            children[ci].u.list.items[i].label = arena_strdup(g_session_arena, label);
         }
         children[ci].style_class = "list"; ci++;
         int sel_count = 0; for (int i = 0; i < item->choice_count; i++) if (d->edit_selected_set[i]) sel_count++;
         char footer[256]; snprintf(footer, sizeof(footer), "%d selected  Space:toggle  Enter:confirm  Esc:cancel", sel_count);
         children[ci].type = RNODE_TEXT; children[ci].rect = rect_new(1, oh - 2, ow - 2, 1);
-        children[ci].text.content = arena_strdup(g_session_arena, footer); children[ci].style_class = "text"; children[ci].state = "muted";
+        children[ci].u.text.content = arena_strdup(g_session_arena, footer); children[ci].style_class = "text"; children[ci].state = "muted";
         break;
     }
     default: break;
     }
     out->type = RNODE_CONTAINER; out->rect = rect_new(ox, oy, ow, oh);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = child_count;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children; out->u.container.child_count = child_count;
 }
 
-static void hub_render(Widget *self, Rect area, RenderTree *out) {
+static void hub_render(Widget *self, RenderTree *out) {
     HubData *d = (HubData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
-    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) { d->sub_widget->vtable.render(d->sub_widget, area, out); return; }
+    if (d->mode == HUB_EDITING_SUB_WIDGET && d->sub_widget) { d->sub_widget->vtable.render(d->sub_widget, out); return; }
     if (d->mode >= HUB_EDITING_MENU && d->mode <= HUB_EDITING_MULTISELECT) { hub_render_overlay(d, area, out); return; }
     out->style_class = "container";
     int box_w = (int)(area.w * 0.95f); if (box_w > area.w - 2) box_w = area.w - 2;
@@ -385,35 +387,35 @@ static void hub_render(Widget *self, Rect area, RenderTree *out) {
     if (d->mode == HUB_CONFIRM_PROCEED || d->mode == HUB_CONFIRM_QUIT) {
         RenderTree *children = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
         children[0].type = RNODE_TEXT; children[0].rect = rect_new(1, 0, box_w - 2, 1);
-        children[0].text.content = arena_strdup(g_session_arena, d->title); children[0].style_class = "text"; children[0].state = "title";
+        children[0].u.text.content = arena_strdup(g_session_arena, d->title); children[0].style_class = "text"; children[0].state = "title";
         children[1].type = RNODE_TEXT; children[1].rect = rect_new(1, 2, box_w - 2, 1);
-        children[1].text.content = d->mode == HUB_CONFIRM_PROCEED ? "Proceed with installation?" : "Quit without saving?";
+        children[1].u.text.content = d->mode == HUB_CONFIRM_PROCEED ? "Proceed with installation?" : "Quit without saving?";
         children[1].style_class = "text";
         children[2].type = RNODE_TEXT; children[2].rect = rect_new(1, 4, box_w - 2, 1);
-        children[2].text.content = "[Y]es  [N]o"; children[2].style_class = "text";
+        children[2].u.text.content = "[Y]es  [N]o"; children[2].style_class = "text";
         out->type = RNODE_CONTAINER; out->rect = rect_new(box_x, box_y, box_w, 7);
-        out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-        out->container.children = children; out->container.child_count = 3;
+        out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+        out->u.container.children = children; out->u.container.child_count = 3;
         return;
     }
 
     RenderTree *children = arena_alloc(g_session_arena, 4 * sizeof(RenderTree));
     int idx = 0;
     children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-    children[idx].text.content = arena_strdup(g_session_arena, d->title); children[idx].style_class = "text"; children[idx].state = "title"; idx++;
+    children[idx].u.text.content = arena_strdup(g_session_arena, d->title); children[idx].style_class = "text"; children[idx].state = "title"; idx++;
     int left_w = box_w * 30 / 100, right_x = left_w + 2, right_w = box_w - right_x - 1;
     children[idx].type = RNODE_LIST; children[idx].rect = rect_new(1, 1, left_w, box_h - 3);
-    children[idx].list.item_count = d->cat_count; children[idx].list.selected = d->cat_idx;
-    children[idx].list.items = arena_alloc(g_session_arena, d->cat_count * sizeof(ListItem));
+    children[idx].u.list.item_count = d->cat_count; children[idx].u.list.selected = d->cat_idx;
+    children[idx].u.list.items = arena_alloc(g_session_arena, d->cat_count * sizeof(ListItem));
     for (int i = 0; i < d->cat_count; i++) {
         char label[256]; snprintf(label, sizeof(label), "%s %s", i == d->cat_idx ? ">" : " ", d->categories[i].label);
-        children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
+        children[idx].u.list.items[i].label = arena_strdup(g_session_arena, label);
     }
     children[idx].style_class = "list"; idx++;
     HubCategory *cat = &d->categories[d->cat_idx]; int vis_count = hub_visible_count(d);
     children[idx].type = RNODE_LIST; children[idx].rect = rect_new(right_x, 1, right_w, box_h - 3);
-    children[idx].list.item_count = vis_count; children[idx].list.selected = d->item_idx;
-    children[idx].list.items = arena_alloc(g_session_arena, vis_count * sizeof(ListItem));
+    children[idx].u.list.item_count = vis_count; children[idx].u.list.selected = d->item_idx;
+    children[idx].u.list.items = arena_alloc(g_session_arena, vis_count * sizeof(ListItem));
     int vi = 0;
     for (int i = 0; i < cat->item_count; i++) {
         if (!hub_visible(d, &cat->items[i])) continue;
@@ -422,17 +424,17 @@ static void hub_render(Widget *self, Rect area, RenderTree *out) {
         if (item->display && strcmp(item->display, "set/not set") == 0) disp = (val && strlen(val) > 0) ? "set" : "not set";
         if (!disp || strlen(disp) == 0) disp = "(none)";
         char label[512]; snprintf(label, sizeof(label), "%s %s: %s", vi == d->item_idx ? ">" : " ", item->label, disp);
-        children[idx].list.items[vi].label = arena_strdup(g_session_arena, label); vi++;
+        children[idx].u.list.items[vi].label = arena_strdup(g_session_arena, label); vi++;
     }
     children[idx].style_class = "list"; idx++;
     char footer[512] = {0};
     for (int i = 0; i < d->action_count; i++) { char buf[32]; snprintf(buf, sizeof(buf), "F%d:%s  ", i + 1, d->actions[i]); strcat(footer, buf); }
     strcat(footer, "Up/Down:items  Left/Right:categories  Enter:edit  Esc:quit");
     children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[idx].text.content = arena_strdup(g_session_arena, footer); children[idx].style_class = "text"; children[idx].state = "muted"; idx++;
+    children[idx].u.text.content = arena_strdup(g_session_arena, footer); children[idx].style_class = "text"; children[idx].state = "muted"; idx++;
     out->type = RNODE_CONTAINER; out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children; out->u.container.child_count = idx;
 }
 
 static EventResult hub_handle_edit_event(HubData *d, Event *ev) {

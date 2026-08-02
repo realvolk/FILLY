@@ -7,21 +7,23 @@
 typedef struct { WidgetBase base; char *title, *submit_label; FormField *fields; int field_count, focused; } FormData;
 extern Arena *g_session_arena;
 
-static void form_render(Widget *self, Rect area, RenderTree *out) {
+static void form_render(Widget *self, RenderTree *out) {
     FormData *d = (FormData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out)); out->style_class = "container";
     int box_w = 60, box_h = 4 + d->field_count * 2 + 2; if (box_w > area.w - 2) box_w = area.w - 2; if (box_h > area.h - 2) box_h = area.h - 2;
     RenderTree *children = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT; children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena, d->title); children[0].style_class = "text"; children[0].state = "title";
+    children[0].u.text.content = arena_strdup(g_session_arena, d->title); children[0].style_class = "text"; children[0].state = "title";
     children[1].type = RNODE_FORM; children[1].rect = rect_new(1, 1, box_w - 2, box_h - 3);
-    children[1].form.fields = d->fields; children[1].form.field_count = d->field_count; children[1].form.focused = d->focused;
-    children[1].form.submit_label = arena_strdup(g_session_arena, d->submit_label); children[1].style_class = "form";
+    children[1].u.form.fields = d->fields; children[1].u.form.field_count = d->field_count; children[1].u.form.focused = d->focused;
+    children[1].u.form.submit_label = arena_strdup(g_session_arena, d->submit_label); children[1].style_class = "form";
     children[2].type = RNODE_TEXT; children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[2].text.content = "Tab:next  Enter:submit  Esc:cancel"; children[2].style_class = "text"; children[2].state = "muted";
+    children[2].u.text.content = "Tab:next  Enter:submit  Esc:cancel"; children[2].style_class = "text"; children[2].state = "muted";
     out->type = RNODE_CONTAINER; out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = 3;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children; out->u.container.child_count = 3;
 }
 
 static EventResult form_handle_event(Widget *self, Event *ev, Backend *backend) {

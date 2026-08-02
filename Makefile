@@ -1,8 +1,8 @@
-CC = gcc
-CFLAGS = -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -Wall -Wextra -O2 -fPIC -Isrc -Isrc/filly-port
+CC = cc
+CFLAGS = -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -pedantic -O2 -Isrc -Isrc/filly-port
 PKG_DEPS = libsodium
 CFLAGS += $(shell pkg-config --cflags $(PKG_DEPS) 2>/dev/null)
-LDFLAGS = -ldl -lpthread -lm -lsodium -lcrypt -rdynamic -lutil $(shell pkg-config --libs $(PKG_DEPS) 2>/dev/null)
+LDFLAGS = -ldl -lpthread -lm -lsodium -lcrypt -lutil $(shell pkg-config --libs $(PKG_DEPS) 2>/dev/null)
 
 GCORE_DEPS = libdrm libinput wayland-client xkbcommon x11 libudev gbm egl
 GCORE_CFLAGS = $(shell pkg-config --cflags $(GCORE_DEPS) 2>/dev/null)
@@ -16,6 +16,7 @@ SRCS = src/cli/main.c \
        src/protocol/schema.c \
        src/protocol/msgpack.c \
        src/core/render.c \
+       src/core/layout.c \
        src/core/widget.c \
        src/core/widget_base.c \
        src/core/session.c \
@@ -118,10 +119,10 @@ src/cJSON.o: src/cJSON.c src/cJSON.h
 plugins: libartixforge.so libgforge.so
 
 libartixforge.so: $(PLUGIN_ARTIXFORGE_SRCS)
-	$(CC) $(CFLAGS) -Wno-misleading-indentation -shared -o $@ $^
+	$(CC) $(CFLAGS) -fPIC -Wno-misleading-indentation -shared -Wl,--unresolved-symbols=ignore-all -o $@ $^
 
 libgforge.so: $(PLUGIN_GFORGE_SRCS)
-	$(CC) $(CFLAGS) -shared -o $@ $^
+	$(CC) $(CFLAGS) -fPIC -shared -Wl,--unresolved-symbols=ignore-all -o $@ $^
 
 libfilly.so: $(LIBFILLY_SRCS) src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -shared -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
@@ -132,7 +133,7 @@ filly-test: test/test.c $(TEST_SRCS) src/cJSON.o
 test: filly-test
 	./filly-test
 
-pixel-test: test/pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/cJSON.o
+pixel-test: test/pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/core/animation.c src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -o pixel-test $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
 BUILDER_SRCS = src/builder/filly_build.c \
@@ -144,9 +145,10 @@ BUILDER_SRCS = src/builder/filly_build.c \
                src/builder/validator.c
 
 filly-build: $(BUILDER_SRCS) src/core/widget.c src/core/widget_base.c \
-             src/core/widget_factories.c src/core/render.c src/core/session.c \
-             src/core/store.c src/core/theme.c src/core/arena.c src/core/undo.c \
-             src/core/clipboard.c src/core/client.c src/core/log.c src/core/config.c \
+             src/core/widget_factories.c src/core/render.c src/core/layout.c \
+             src/core/session.c src/core/store.c src/core/theme.c \
+             src/core/arena.c src/core/undo.c src/core/clipboard.c \
+             src/core/client.c src/core/log.c src/core/config.c \
              src/core/i18n.c src/core/shm_ipc.c src/core/recorder.c \
              src/core/animation.c \
              src/script/fil.c src/protocol/protocol.c src/protocol/schema.c \
@@ -231,10 +233,13 @@ test-bench: test/benchmark.c $(TEST_SRCS) src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -o test-bench $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 	./test-bench
 
-test-all: test test-tui test-gui test-fault test-bench
+test-full: filly filly-build pixel-test
+	./test/harness_full.sh
+
+test-all: test test-tui test-gui test-fault test-bench test-full
 
 lint:
-	clang-tidy src/cli/main.c src/protocol/protocol.c src/protocol/schema.c src/core/render.c src/core/widget.c src/core/session.c src/core/store.c src/core/theme.c src/core/client.c src/backend/daemon/daemon.c src/backend/terminal/terminal.c src/backend/gcore/renderer.c -- $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE
+	clang-tidy src/cli/main.c src/protocol/protocol.c src/protocol/schema.c src/core/render.c src/core/layout.c src/core/widget.c src/core/session.c src/core/store.c src/core/theme.c src/core/client.c src/backend/daemon/daemon.c src/backend/terminal/terminal.c src/backend/gcore/renderer.c -- $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE
 
 cppcheck:
 	cppcheck --enable=all --suppress=missingIncludeSystem --std=c99 -Isrc -Isrc/filly-port src/

@@ -5,12 +5,14 @@
 
 typedef struct { WidgetBase base; Orientation orientation; } SeparatorData;
 
-static void separator_render(Widget *self, Rect area, RenderTree *out) {
+static void separator_render(Widget *self, RenderTree *out) {
     SeparatorData *d = (SeparatorData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->type = RNODE_SEPARATOR;
     out->rect = area;
-    out->separator.orientation = d->orientation;
+    out->u.separator.orientation = d->orientation;
     out->style_class = "separator";
 }
 

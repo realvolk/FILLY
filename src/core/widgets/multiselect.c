@@ -31,8 +31,10 @@ static void ms_update(MultiselectData *d) {
     if (d->cursor >= d->filtered_count) d->cursor = d->filtered_count > 0 ? d->filtered_count - 1 : 0;
 }
 
-static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
+static void multiselect_render(Widget *self, RenderTree *out) {
     MultiselectData *d = (MultiselectData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     ms_update(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
@@ -43,24 +45,24 @@ static void multiselect_render(Widget *self, Rect area, RenderTree *out) {
     int child_count = (d->title ? 1 : 0) + (d->message ? 1 : 0) + 3;
     RenderTree *children = arena_alloc(g_session_arena, child_count * sizeof(RenderTree));
     int idx = 0; int y = 0;
-    if (d->title && strlen(d->title)) { children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, y, box_w - 2, 1); children[idx].text.content = arena_strdup(g_session_arena, d->title); children[idx].style_class = "text"; children[idx].state = "title"; idx++; y++; }
-    if (d->message && strlen(d->message)) { children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, y, box_w - 2, 2); children[idx].text.content = arena_strdup(g_session_arena, d->message); children[idx].style_class = "text"; idx++; y += 2; }
+    if (d->title && strlen(d->title)) { children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, y, box_w - 2, 1); children[idx].u.text.content = arena_strdup(g_session_arena, d->title); children[idx].style_class = "text"; children[idx].state = "title"; idx++; y++; }
+    if (d->message && strlen(d->message)) { children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, y, box_w - 2, 2); children[idx].u.text.content = arena_strdup(g_session_arena, d->message); children[idx].style_class = "text"; idx++; y += 2; }
     children[idx].type = RNODE_INPUT; children[idx].rect = rect_new(1, y, box_w - 2, 1);
-    char qb[512]; snprintf(qb, sizeof(qb), "> %s", d->query); children[idx].input.text = arena_strdup(g_session_arena, qb); children[idx].input.cursor = strlen(qb);
-    children[idx].input.placeholder = arena_strdup(g_session_arena, d->placeholder ? d->placeholder : "Type to filter..."); children[idx].style_class = "input"; idx++; y++;
+    char qb[512]; snprintf(qb, sizeof(qb), "> %s", d->query); children[idx].u.input.text = arena_strdup(g_session_arena, qb); children[idx].u.input.cursor = strlen(qb);
+    children[idx].u.input.placeholder = arena_strdup(g_session_arena, d->placeholder ? d->placeholder : "Type to filter..."); children[idx].style_class = "input"; idx++; y++;
     int list_h = box_h - y - 2;
     children[idx].type = RNODE_LIST; children[idx].rect = rect_new(1, y, box_w - 2, list_h > 0 ? list_h : 1);
-    children[idx].list.item_count = d->filtered_count; children[idx].list.selected = d->cursor;
-    children[idx].list.items = arena_alloc(g_session_arena, d->filtered_count * sizeof(ListItem));
-    for (int i = 0; i < d->filtered_count; i++) { char label[1024]; int orig = d->filtered[i]; snprintf(label, sizeof(label), " %s %s", d->selected[orig] ? "[x]" : "[ ]", d->choices[orig]); children[idx].list.items[i].label = arena_strdup(g_session_arena, label); }
+    children[idx].u.list.item_count = d->filtered_count; children[idx].u.list.selected = d->cursor;
+    children[idx].u.list.items = arena_alloc(g_session_arena, d->filtered_count * sizeof(ListItem));
+    for (int i = 0; i < d->filtered_count; i++) { char label[1024]; int orig = d->filtered[i]; snprintf(label, sizeof(label), " %s %s", d->selected[orig] ? "[x]" : "[ ]", d->choices[orig]); children[idx].u.list.items[i].label = arena_strdup(g_session_arena, label); }
     children[idx].style_class = "list"; idx++;
     int sel_count = 0; for (int i = 0; i < d->count; i++) if (d->selected[i]) sel_count++;
     children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
     char footer[256]; snprintf(footer, sizeof(footer), "Selected: %d/%d  Space:toggle  Enter:confirm  Esc:cancel", sel_count, d->count);
-    children[idx].text.content = arena_strdup(g_session_arena, footer); children[idx].style_class = "text"; children[idx].state = "muted"; idx++;
+    children[idx].u.text.content = arena_strdup(g_session_arena, footer); children[idx].style_class = "text"; children[idx].state = "muted"; idx++;
     out->type = RNODE_CONTAINER; out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children; out->u.container.child_count = idx;
 }
 
 static EventResult multiselect_handle_event(Widget *self, Event *ev, Backend *backend) {

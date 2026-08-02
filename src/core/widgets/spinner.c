@@ -7,8 +7,10 @@
 typedef struct { WidgetBase base; char *message; int frame; } SpinnerData;
 extern Arena *g_session_arena;
 
-static void spinner_render(Widget *self, Rect area, RenderTree *out) {
+static void spinner_render(Widget *self, RenderTree *out) {
     SpinnerData *d = (SpinnerData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = 40, box_h = 5;
@@ -17,20 +19,20 @@ static void spinner_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 2 * sizeof(RenderTree));
     children[0].type = RNODE_SPINNER;
     children[0].rect = rect_new(1, 1, box_w - 2, 1);
-    children[0].spinner.message = arena_strdup(g_session_arena, d->message);
-    children[0].spinner.frame = d->frame;
+    children[0].u.spinner.message = arena_strdup(g_session_arena, d->message);
+    children[0].u.spinner.frame = d->frame;
     children[0].style_class = "spinner";
     children[1].type = RNODE_TEXT;
     children[1].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[1].text.content = "Esc:cancel";
+    children[1].u.text.content = "Esc:cancel";
     children[1].style_class = "text";
     children[1].state = "muted";
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 2;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 2;
 }
 
 static EventResult spinner_handle_event(Widget *self, Event *ev, Backend *backend) {

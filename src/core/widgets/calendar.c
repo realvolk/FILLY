@@ -18,39 +18,51 @@ static int days_in_month(int y, int m) {
     }
 }
 
-static void calendar_render(Widget *self, Rect area, RenderTree *out) {
+static void calendar_render(Widget *self, RenderTree *out) {
     CalendarData *d = (CalendarData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
-    int box_w = 40, box_h = 12;
-    if (box_w > area.w - 2) box_w = area.w - 2;
-    if (box_h > area.h - 2) box_h = area.h - 2;
+    int is_gui = (area.w > 200);
+    int ch = is_gui ? 30 : 1;
+    int box_w = is_gui ? 560 : 40;
+    int box_h = is_gui ? 360 : 12;
+    if (box_w > area.w - (is_gui ? 4 : 2)) box_w = area.w - (is_gui ? 4 : 2);
+    if (box_h > area.h - (is_gui ? 4 : 2)) box_h = area.h - (is_gui ? 4 : 2);
+    
     RenderTree *children = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
+    
     children[0].type = RNODE_TEXT;
-    children[0].rect = rect_new(1, 0, box_w - 2, 1);
+    children[0].rect = rect_new(ch, 0, box_w - 2*ch, ch);
     const char *months[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
     char title_buf[64];
     snprintf(title_buf, sizeof(title_buf), "%s %s", d->title, months[d->month - 1]);
-    children[0].text.content = arena_strdup(g_session_arena, title_buf);
+    children[0].u.text.content = arena_strdup(g_session_arena, title_buf);
     children[0].style_class = "text";
     children[0].state = "title";
+    
     children[1].type = RNODE_CALENDAR;
-    children[1].rect = rect_new(1, 1, box_w - 2, box_h - 3);
-    children[1].calendar.year = d->year;
-    children[1].calendar.month = d->month;
-    children[1].calendar.selected_day = d->selected_day;
+    children[1].rect = rect_new(ch, ch, box_w - 2*ch, box_h - 3*ch);
+    children[1].u.calendar.year = d->year;
+    children[1].u.calendar.month = d->month;
+    children[1].u.calendar.selected_day = d->selected_day;
     children[1].style_class = "calendar";
+    
     children[2].type = RNODE_TEXT;
-    children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[2].text.content = "Left/Right:day  Up/Down:week  Enter:select  Esc:cancel";
+    children[2].rect = rect_new(ch, box_h - 2*ch, box_w - 2*ch, ch);
+    children[2].u.text.content = "Left/Right:day  Up/Down:week  Enter:select  Esc:cancel";
     children[2].style_class = "text";
     children[2].state = "muted";
+    
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 3;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 3;
+
+    (void)d; /* suppress unused warning if not used below */
 }
 
 static EventResult calendar_handle_event(Widget *self, Event *ev, Backend *backend) {

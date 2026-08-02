@@ -20,8 +20,10 @@ typedef struct {
 
 extern Arena *g_session_arena;
 
-static void pw_render(Widget *self, Rect area, RenderTree *out) {
+static void pw_render(Widget *self, RenderTree *out) {
     PWConfirmData *d = (PWConfirmData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.50f);
@@ -33,14 +35,14 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 5 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT;
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
-    children[0].text.content = arena_strdup(g_session_arena, d->title);
+    children[0].u.text.content = arena_strdup(g_session_arena, d->title);
     children[0].style_class = "text"; children[0].state = "title";
 
     int y = 1;
     if (d->message && strlen(d->message)) {
         children[1].type = RNODE_TEXT;
         children[1].rect = rect_new(1, y, box_w - 2, 2);
-        children[1].text.content = arena_strdup(g_session_arena, d->message);
+        children[1].u.text.content = arena_strdup(g_session_arena, d->message);
         children[1].style_class = "text";
         y = 4;
     }
@@ -54,7 +56,7 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
         char buf[512], mask[128] = {0};
         for (int j = 0; j < (int)strlen(vals[i]) && j < 127; j++) mask[j] = '*';
         snprintf(buf, sizeof(buf), "%s %s\n%s", labels[i], mask, d->field == i ? ">" : " ");
-        children[idx].text.content = arena_strdup(g_session_arena, buf);
+        children[idx].u.text.content = arena_strdup(g_session_arena, buf);
         children[idx].style_class = "text";
         y += 2;
     }
@@ -63,21 +65,21 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
     if (strlen(d->pass1) && strlen(d->pass2) && strcmp(d->pass1, d->pass2) != 0) {
         children[footer_idx].type = RNODE_TEXT;
         children[footer_idx].rect = rect_new(1, y, box_w - 2, 1);
-        children[footer_idx].text.content = "Passwords do not match!";
+        children[footer_idx].u.text.content = "Passwords do not match!";
         children[footer_idx].style_class = "text";
     } else {
         children[footer_idx].type = RNODE_TEXT;
         children[footer_idx].rect = rect_new(1, y, box_w - 2, 1);
-        children[footer_idx].text.content = "Tab:next  Enter:submit  Esc:cancel";
+        children[footer_idx].u.text.content = "Tab:next  Enter:submit  Esc:cancel";
         children[footer_idx].style_class = "text"; children[footer_idx].state = "muted";
     }
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 5;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 5;
 }
 
 static EventResult pw_handle(Widget *self, Event *ev, Backend *backend) {

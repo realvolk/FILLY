@@ -7,8 +7,10 @@
 typedef struct { WidgetBase base; char **items; int count, selected; } ContextMenuData;
 extern Arena *g_session_arena;
 
-static void cm_render(Widget *self, Rect area, RenderTree *out) {
+static void cm_render(Widget *self, RenderTree *out) {
     ContextMenuData *d = (ContextMenuData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = 25, box_h = d->count + 2;
@@ -17,23 +19,23 @@ static void cm_render(Widget *self, Rect area, RenderTree *out) {
     RenderTree *children = arena_alloc(g_session_arena, 2 * sizeof(RenderTree));
     children[0].type = RNODE_CONTEXT_MENU;
     children[0].rect = rect_new(0, 0, box_w - 2, box_h - 2);
-    children[0].context_menu.item_count = d->count;
-    children[0].context_menu.selected = d->selected;
-    children[0].context_menu.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
+    children[0].u.context_menu.item_count = d->count;
+    children[0].u.context_menu.selected = d->selected;
+    children[0].u.context_menu.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
     for (int i = 0; i < d->count; i++)
-        children[0].context_menu.items[i].label = arena_strdup(g_session_arena, d->items[i]);
+        children[0].u.context_menu.items[i].label = arena_strdup(g_session_arena, d->items[i]);
     children[0].style_class = "context_menu";
     children[1].type = RNODE_TEXT;
     children[1].rect = rect_new(0, box_h - 2, box_w - 2, 1);
-    children[1].text.content = "Up/Down:move  Enter:select  Esc:cancel";
+    children[1].u.text.content = "Up/Down:move  Enter:select  Esc:cancel";
     children[1].style_class = "text";
     children[1].state = "muted";
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 2;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 2;
 }
 
 static EventResult cm_handle_event(Widget *self, Event *ev, Backend *backend) {

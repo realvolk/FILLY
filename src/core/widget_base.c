@@ -2,7 +2,7 @@
 #include <string.h>
 
 void widget_base_init(Widget *w, void *data, size_t data_size,
-                      void (*render)(Widget*, Rect, RenderTree*),
+                      void (*render)(Widget*, RenderTree*),
                       EventResult (*handle_event)(Widget*, Event*, Backend*),
                       void (*destroy)(Widget*)) {
     w->vtable.render = render;

@@ -1,4 +1,10 @@
 #pragma once
+
+#ifdef _POSIX_C_SOURCE
+#undef _POSIX_C_SOURCE
+#endif
+#define _GNU_SOURCE
+
 #include <sys/socket.h>
 #include <sys/un.h>
 

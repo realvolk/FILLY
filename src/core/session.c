@@ -9,6 +9,10 @@
 #include <sys/time.h>
 #include "script/fil.h"
 #include "core/animation.h"
+#include <stdio.h>
+
+extern BackendVTable gcore_vtable;
+extern BackendVTable headless_pixel_vtable;
 
 Theme *g_active_theme = NULL;
 Store *g_active_store = NULL;
@@ -74,6 +78,11 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
     int idle_count = 0, last_store_version = 0;
     long long last_frame = 0;
     g_session_arena = arena_new(1024 * 1024);
+    bool is_pixel = (backend->vtable == &gcore_vtable || backend->vtable == &headless_pixel_vtable);
+
+    WidgetBase *wb = (WidgetBase *)((char *)w + sizeof(Widget));
+    wb->render_area = rect_new(0, 0, term_w, term_h);
+
 #ifdef FILLY_PROFILING
     if (prof_fps_start == 0) prof_fps_start = time_ms();
 #endif
@@ -82,8 +91,9 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
         arena_reset(g_session_arena);
         RenderTree tree;
         memset(&tree, 0, sizeof(tree));
-        w->vtable.render(w, rect_new(0, 0, term_w, term_h), &tree);
+        w->vtable.render(w, &tree);
         if (g_active_theme) resolve_node_styles(&tree, g_active_theme);
+        layout_tree(&tree, term_w, term_h, is_pixel);
         long long now = time_ms();
         animation_update(&tree, now);
         backend->vtable->draw(backend->data, &tree);
@@ -95,6 +105,8 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
         backend->vtable->get_size(backend->data, &term_w, &term_h);
         if (term_w != last_w || term_h != last_h) {
             mark_dirty(w);
+            wb->render_area.w = term_w;
+            wb->render_area.h = term_h;
             last_w = term_w;
             last_h = term_h;
         }
@@ -103,8 +115,9 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             arena_reset(g_session_arena);
             RenderTree tree;
             memset(&tree, 0, sizeof(tree));
-            w->vtable.render(w, rect_new(0, 0, term_w, term_h), &tree);
+            w->vtable.render(w, &tree);
             if (g_active_theme) resolve_node_styles(&tree, g_active_theme);
+            layout_tree(&tree, term_w, term_h, is_pixel);
             long long now = time_ms();
             animation_update(&tree, now);
             backend->vtable->draw(backend->data, &tree);
@@ -112,7 +125,6 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             last_frame = time_ms();
 #ifdef FILLY_PROFILING
             prof_frame_count++;
-            long long now = time_ms();
             if (now - prof_fps_start >= 1000) {
                 session_current_fps = prof_frame_count * 1000.0 / (now - prof_fps_start);
                 prof_frame_count = 0;
@@ -170,7 +182,6 @@ WidgetResponse session_run(Widget *w, Backend *backend) {
             if (undo_stack_redo(session_undo)) { mark_dirty(w); continue; }
         }
         if (ev.type == EVENT_KEY) {
-            WidgetBase *wb = (WidgetBase *)((char *)w + sizeof(Widget));
             if (!wb->accepts_text_input) {
                 for (int i = 0; i < keymap_count; i++) {
                     if (strlen(keymap[i].key) == 1 && ev.code == KEY_CHAR && ev.ch == keymap[i].key[0]) {

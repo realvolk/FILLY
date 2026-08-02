@@ -31,8 +31,10 @@ static void filter_update(FilterData *d) {
     if (d->selected >= d->filtered_count) d->selected = d->filtered_count > 0 ? d->filtered_count - 1 : 0;
 }
 
-static void filter_render(Widget *self, Rect area, RenderTree *out) {
+static void filter_render(Widget *self, RenderTree *out) {
     FilterData *d = (FilterData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     filter_update(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
@@ -45,31 +47,31 @@ static void filter_render(Widget *self, Rect area, RenderTree *out) {
     int idx = 0;
     if (d->title && strlen(d->title)) {
         children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-        children[idx].text.content = arena_strdup(g_session_arena, d->title);
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->title);
         children[idx].style_class = "text"; children[idx].state = "title"; idx++;
     }
     children[idx].type = RNODE_INPUT; children[idx].rect = rect_new(1, 1, box_w - 2, 1);
     char query_buf[512];
     snprintf(query_buf, sizeof(query_buf), "> %s", d->query);
-    children[idx].input.text = arena_strdup(g_session_arena, query_buf);
-    children[idx].input.cursor = strlen(query_buf);
-    children[idx].input.placeholder = arena_strdup(g_session_arena, d->placeholder ? d->placeholder : "Type to filter...");
+    children[idx].u.input.text = arena_strdup(g_session_arena, query_buf);
+    children[idx].u.input.cursor = strlen(query_buf);
+    children[idx].u.input.placeholder = arena_strdup(g_session_arena, d->placeholder ? d->placeholder : "Type to filter...");
     children[idx].style_class = "input"; idx++;
     int list_h = box_h - 3;
     children[idx].type = RNODE_LIST; children[idx].rect = rect_new(1, 2, box_w - 2, list_h > 0 ? list_h : 1);
-    children[idx].list.item_count = d->filtered_count;
-    children[idx].list.selected = d->selected;
-    children[idx].list.items = arena_alloc(g_session_arena, d->filtered_count * sizeof(ListItem));
+    children[idx].u.list.item_count = d->filtered_count;
+    children[idx].u.list.selected = d->selected;
+    children[idx].u.list.items = arena_alloc(g_session_arena, d->filtered_count * sizeof(ListItem));
     for (int i = 0; i < d->filtered_count; i++)
-        children[idx].list.items[i].label = arena_strdup(g_session_arena, d->choices[d->filtered[i]]);
+        children[idx].u.list.items[i].label = arena_strdup(g_session_arena, d->choices[d->filtered[i]]);
     children[idx].style_class = "list"; idx++;
     children[idx].type = RNODE_TEXT; children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[idx].text.content = "Type:filter  Up/Down:move  Enter:select  Esc:cancel";
+    children[idx].u.text.content = "Type:filter  Up/Down:move  Enter:select  Esc:cancel";
     children[idx].style_class = "text"; children[idx].state = "muted"; idx++;
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = children; out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children; out->u.container.child_count = idx;
 }
 
 static EventResult filter_handle_event(Widget *self, Event *ev, Backend *backend) {

@@ -43,8 +43,10 @@ static void pw_set(PWData *d, const char *k, const char *v) {
     d->vals[d->val_count-1] = strdup(v);
 }
 
-static void pw_render(Widget *self, Rect area, RenderTree *out) {
+static void pw_render(Widget *self, RenderTree *out) {
     PWData *d = (PWData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.85f), box_h = (int)(area.h * 0.90f);
@@ -56,27 +58,27 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
     int idx = 0;
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-    children[idx].text.content = arena_strdup(g_session_arena, d->title);
+    children[idx].u.text.content = arena_strdup(g_session_arena, d->title);
     children[idx].style_class = "text"; children[idx].state = "title";
     idx++;
 
     if (d->cat_count == 0) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 1, box_w - 2, 1);
-        children[idx].text.content = "No categories configured.";
+        children[idx].u.text.content = "No categories configured.";
         children[idx].style_class = "text";
         idx++;
     } else {
         int left_w = box_w * 30 / 100, right_x = left_w + 2, right_w = box_w - right_x - 1;
         children[idx].type = RNODE_LIST;
         children[idx].rect = rect_new(1, 1, left_w, box_h - 3);
-        children[idx].list.item_count = d->cat_count;
-        children[idx].list.selected = d->cat_idx;
-        children[idx].list.items = arena_alloc(g_session_arena, d->cat_count * sizeof(ListItem));
+        children[idx].u.list.item_count = d->cat_count;
+        children[idx].u.list.selected = d->cat_idx;
+        children[idx].u.list.items = arena_alloc(g_session_arena, d->cat_count * sizeof(ListItem));
         for (int i = 0; i < d->cat_count; i++) {
             char label[256];
             snprintf(label, sizeof(label), "%s %s", i == d->cat_idx ? ">" : " ", d->cat_names[i]);
-            children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
+            children[idx].u.list.items[i].label = arena_strdup(g_session_arena, label);
         }
         children[idx].style_class = "list";
         idx++;
@@ -84,14 +86,14 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
         int ic = d->item_counts[d->cat_idx];
         children[idx].type = RNODE_LIST;
         children[idx].rect = rect_new(right_x, 1, right_w, box_h - 3);
-        children[idx].list.item_count = ic;
-        children[idx].list.selected = d->item_idx;
-        children[idx].list.items = arena_alloc(g_session_arena, ic * sizeof(ListItem));
+        children[idx].u.list.item_count = ic;
+        children[idx].u.list.selected = d->item_idx;
+        children[idx].u.list.items = arena_alloc(g_session_arena, ic * sizeof(ListItem));
         for (int i = 0; i < ic; i++) {
             char *val = pw_get(d, d->item_ids[d->cat_idx][i]);
             char label[512];
             snprintf(label, sizeof(label), "%s %s: %s", i == d->item_idx ? ">" : "  ", d->item_ids[d->cat_idx][i], val ? val : "(none)");
-            children[idx].list.items[i].label = arena_strdup(g_session_arena, label);
+            children[idx].u.list.items[i].label = arena_strdup(g_session_arena, label);
         }
         children[idx].style_class = "list";
         idx++;
@@ -99,16 +101,16 @@ static void pw_render(Widget *self, Rect area, RenderTree *out) {
 
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[idx].text.content = d->mode == 1 ? "[Y]es  [N]o" : "Up/Down:items  Left/Right:categories  Enter:edit  F1:Build  Esc:cancel";
+    children[idx].u.text.content = d->mode == 1 ? "[Y]es  [N]o" : "Up/Down:items  Left/Right:categories  Enter:edit  F1:Build  Esc:cancel";
     children[idx].style_class = "text"; children[idx].state = "muted";
     idx++;
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = idx;
 }
 
 static EventResult pw_handle(Widget *self, Event *ev, Backend *backend) {

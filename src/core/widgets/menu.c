@@ -7,8 +7,10 @@
 typedef struct { WidgetBase base; char *title, *message, **choices; int count, selected; } MenuData;
 extern Arena *g_session_arena;
 
-static void menu_render(Widget *self, Rect area, RenderTree *out) {
+static void menu_render(Widget *self, RenderTree *out) {
     MenuData *d = (MenuData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out)); out->style_class = "container";
 
     int inner_h = d->count;
@@ -30,8 +32,8 @@ static void menu_render(Widget *self, Rect area, RenderTree *out) {
     if (d->title && strlen(d->title)) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, row, content_w, 1);
-        children[idx].text.content = arena_strdup(g_session_arena, d->title);
-        children[idx].text.align = ALIGN_CENTER;
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->title);
+        children[idx].u.text.align = ALIGN_CENTER;
         children[idx].style_class = "text";
         children[idx].state = "title";
         idx++;
@@ -40,8 +42,8 @@ static void menu_render(Widget *self, Rect area, RenderTree *out) {
     if (d->message && strlen(d->message)) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, row, content_w, 2);
-        children[idx].text.content = arena_strdup(g_session_arena, d->message);
-        children[idx].text.align = ALIGN_CENTER;
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->message);
+        children[idx].u.text.align = ALIGN_CENTER;
         children[idx].style_class = "text";
         idx++;
         row += 2;
@@ -49,28 +51,28 @@ static void menu_render(Widget *self, Rect area, RenderTree *out) {
     int list_h = d->count;
     children[idx].type = RNODE_LIST;
     children[idx].rect = rect_new(1, row, content_w, list_h);
-    children[idx].list.item_count = d->count;
-    children[idx].list.selected = d->selected;
-    children[idx].list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
+    children[idx].u.list.item_count = d->count;
+    children[idx].u.list.selected = d->selected;
+    children[idx].u.list.items = arena_alloc(g_session_arena, d->count * sizeof(ListItem));
     for (int i = 0; i < d->count; i++)
-        children[idx].list.items[i].label = arena_strdup(g_session_arena, d->choices[i]);
+        children[idx].u.list.items[i].label = arena_strdup(g_session_arena, d->choices[i]);
     children[idx].style_class = "list";
     idx++;
     row += list_h;
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, row, content_w, 1);
-    children[idx].text.content = "Up/Down:move  Enter:select  Esc:cancel";
-    children[idx].text.align = ALIGN_CENTER;
+    children[idx].u.text.content = "Up/Down:move  Enter:select  Esc:cancel";
+    children[idx].u.text.align = ALIGN_CENTER;
     children[idx].style_class = "text";
     children[idx].state = "muted";
     idx++;
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = idx;
 }
 
 static EventResult menu_handle_event(Widget *self, Event *ev, Backend *backend) {

@@ -47,8 +47,10 @@ static void fp_populate(FilePickerData *d) {
     if (d->selected >= d->entry_count) d->selected = d->entry_count > 0 ? d->entry_count - 1 : 0;
 }
 
-static void file_picker_render(Widget *self, Rect area, RenderTree *out) {
+static void file_picker_render(Widget *self, RenderTree *out) {
     FilePickerData *d = (FilePickerData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.7f);
@@ -60,31 +62,31 @@ static void file_picker_render(Widget *self, Rect area, RenderTree *out) {
     children[0].rect = rect_new(1, 0, box_w - 2, 1);
     char title_buf[512];
     snprintf(title_buf, sizeof(title_buf), "%s: %s", d->title, d->current_dir);
-    children[0].text.content = arena_strdup(g_session_arena, title_buf);
+    children[0].u.text.content = arena_strdup(g_session_arena, title_buf);
     children[0].style_class = "text";
     children[0].state = "title";
     children[1].type = RNODE_LIST;
     children[1].rect = rect_new(1, 1, box_w - 2, box_h - 3);
-    children[1].list.item_count = d->entry_count;
-    children[1].list.selected = d->selected;
-    children[1].list.items = arena_alloc(g_session_arena, d->entry_count * sizeof(ListItem));
+    children[1].u.list.item_count = d->entry_count;
+    children[1].u.list.selected = d->selected;
+    children[1].u.list.items = arena_alloc(g_session_arena, d->entry_count * sizeof(ListItem));
     for (int i = 0; i < d->entry_count; i++) {
         char label[512];
         snprintf(label, sizeof(label), "%s %s", d->is_dir[i] ? "[DIR]" : "     ", d->entries[i]);
-        children[1].list.items[i].label = arena_strdup(g_session_arena, label);
+        children[1].u.list.items[i].label = arena_strdup(g_session_arena, label);
     }
     children[1].style_class = "list";
     children[2].type = RNODE_TEXT;
     children[2].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[2].text.content = "Up/Down:move  Enter:open/select  Backspace:parent  Esc:cancel";
+    children[2].u.text.content = "Up/Down:move  Enter:open/select  Backspace:parent  Esc:cancel";
     children[2].style_class = "text";
     children[2].state = "muted";
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 3;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 3;
 }
 
 static EventResult file_picker_handle_event(Widget *self, Event *ev, Backend *backend) {

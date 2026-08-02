@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 500
 #include "progress.h"
 #include "core/widget_base.h"
 #include "core/session.h"
@@ -24,7 +25,21 @@ extern Arena *g_session_arena;
 static bool progress_command_allowed(char **cmd, int count) {
     if (count < 1 || !cmd[0]) return false;
     char resolved[PATH_MAX];
-    if (!realpath(cmd[0], resolved)) return false;
+    if (!realpath(cmd[0], resolved)) {
+        const char *path_env = getenv("PATH");
+        if (!path_env) return false;
+        char *path_copy = strdup(path_env);
+        char *dir = strtok(path_copy, ":");
+        bool found = false;
+        while (dir) {
+            char full[PATH_MAX];
+            snprintf(full, sizeof(full), "%s/%s", dir, cmd[0]);
+            if (realpath(full, resolved)) { found = true; break; }
+            dir = strtok(NULL, ":");
+        }
+        free(path_copy);
+        if (!found) return false;
+    }
     const char *allowed[] = {"/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/", NULL};
     for (int i = 0; allowed[i]; i++) {
         size_t len = strlen(allowed[i]);
@@ -97,8 +112,10 @@ static void progress_update(ProgressData *d) {
     }
 }
 
-static void progress_render(Widget *self, Rect area, RenderTree *out) {
+static void progress_render(Widget *self, RenderTree *out) {
     ProgressData *d = (ProgressData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     if (d->child_pid == 0 && d->output && strlen(d->output) == 0) progress_start(d);
     if (d->child_pid > 0) progress_update(d);
     memset(out, 0, sizeof(*out));
@@ -111,41 +128,41 @@ static void progress_render(Widget *self, Rect area, RenderTree *out) {
     int idx = 0;
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, 0, box_w - 2, 1);
-    children[idx].text.content = arena_strdup(g_session_arena, d->title);
+    children[idx].u.text.content = arena_strdup(g_session_arena, d->title);
     children[idx].style_class = "text";
     children[idx].state = "title";
     idx++;
     if (d->show_raw) {
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 1, box_w - 2, box_h - 3);
-        children[idx].text.content = arena_strdup(g_session_arena, d->output ? d->output : "");
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->output ? d->output : "");
         children[idx].style_class = "text";
         idx++;
     } else {
         children[idx].type = RNODE_GAUGE;
         children[idx].rect = rect_new(1, 1, box_w - 2, 3);
-        children[idx].gauge.percent = d->progress;
-        children[idx].gauge.label = arena_strdup(g_session_arena, d->stage ? d->stage : "");
+        children[idx].u.gauge.percent = d->progress;
+        children[idx].u.gauge.label = arena_strdup(g_session_arena, d->stage ? d->stage : "");
         children[idx].style_class = "gauge";
         idx++;
         children[idx].type = RNODE_TEXT;
         children[idx].rect = rect_new(1, 4, box_w - 2, box_h - 6);
-        children[idx].text.content = arena_strdup(g_session_arena, d->output ? d->output : "");
+        children[idx].u.text.content = arena_strdup(g_session_arena, d->output ? d->output : "");
         children[idx].style_class = "text";
         idx++;
     }
     children[idx].type = RNODE_TEXT;
     children[idx].rect = rect_new(1, box_h - 2, box_w - 2, 1);
-    children[idx].text.content = "[Tab] toggle raw  [Esc] cancel";
+    children[idx].u.text.content = "[Tab] toggle raw  [Esc] cancel";
     children[idx].style_class = "text";
     children[idx].state = "muted";
     idx++;
     out->type = RNODE_CONTAINER;
     out->rect = rect_new((area.w - box_w) / 2, (area.h - box_h) / 2, box_w, box_h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = idx;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = idx;
 }
 
 static EventResult progress_handle_event(Widget *self, Event *ev, Backend *backend) {

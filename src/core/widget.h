@@ -11,7 +11,7 @@ typedef enum { EVENT_RESULT_HANDLED, EVENT_RESULT_RESPONSE, EVENT_RESULT_UNHANDL
 typedef struct { EventResultType type; WidgetResponse response; } EventResult;
 
 typedef struct {
-    void (*render)(Widget *self, Rect area, RenderTree *out);
+    void (*render)(Widget *self, RenderTree *out);
     EventResult (*handle_event)(Widget *self, Event *event, Backend *backend);
     bool (*is_dirty)(Widget *self);
     void (*clear_dirty)(Widget *self);

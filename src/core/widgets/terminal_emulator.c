@@ -60,8 +60,10 @@ static void te_read_output(TerminalEmulatorData *d) {
     if (waitpid(d->child_pid, &status, WNOHANG) > 0) d->running = false;
 }
 
-static void terminal_emulator_render(Widget *self, Rect area, RenderTree *out) {
+static void terminal_emulator_render(Widget *self, RenderTree *out) {
     TerminalEmulatorData *d = (TerminalEmulatorData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     d->term_w = area.w - 2;
     d->term_h = area.h - 2;
     if (d->term_w < 20) d->term_w = 20;
@@ -78,7 +80,7 @@ static void terminal_emulator_render(Widget *self, Rect area, RenderTree *out) {
     char title_buf[512];
     snprintf(title_buf, sizeof(title_buf), "%s [%dx%d]%s", d->title, d->term_w, d->term_h,
              d->search_active ? " (search: /)" : "");
-    children[0].text.content = arena_strdup(g_session_arena, title_buf);
+    children[0].u.text.content = arena_strdup(g_session_arena, title_buf);
     children[0].style_class = "text";
     children[0].state = "title";
 
@@ -110,28 +112,28 @@ static void terminal_emulator_render(Widget *self, Rect area, RenderTree *out) {
         filtered[flen] = '\0';
         display = flen > 0 ? filtered : "No matches";
     }
-    children[1].text.content = arena_strdup(g_session_arena, display);
+    children[1].u.text.content = arena_strdup(g_session_arena, display);
     children[1].style_class = "text";
 
     children[2].type = RNODE_TEXT;
     children[2].rect = rect_new(1, d->term_h - 1, d->term_w, 1);
     if (d->search_active) {
         snprintf(title_buf, sizeof(title_buf), "/%s_", d->search_buf);
-        children[2].text.content = arena_strdup(g_session_arena, title_buf);
+        children[2].u.text.content = arena_strdup(g_session_arena, title_buf);
     } else if (d->running) {
-        children[2].text.content = "Ctrl+D:exit  /:search  Type:input";
+        children[2].u.text.content = "Ctrl+D:exit  /:search  Type:input";
     } else {
-        children[2].text.content = "[Process ended] Any key to close";
+        children[2].u.text.content = "[Process ended] Any key to close";
     }
     children[2].style_class = "text";
     children[2].state = "muted";
 
     out->type = RNODE_CONTAINER;
     out->rect = rect_new(0, 0, area.w, area.h);
-    out->container.border = BORDER_SINGLE;
-    out->container.padding = edgeinsets_zero();
-    out->container.children = children;
-    out->container.child_count = 3;
+    out->u.container.border = BORDER_SINGLE;
+    out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = children;
+    out->u.container.child_count = 3;
 }
 
 static EventResult terminal_emulator_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -179,58 +181,20 @@ static EventResult terminal_emulator_handle_event(Widget *self, Event *ev, Backe
     }
 
     switch (ev->code) {
-        case KEY_ESC:
-            if (d->running) write(d->pty_fd, "\x1b", 1);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_ENTER:
-            write(d->pty_fd, "\r", 1);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_TAB:
-            write(d->pty_fd, "\t", 1);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_BACKSPACE:
-            write(d->pty_fd, "\x7f", 1);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_UP:
-            write(d->pty_fd, "\x1b[A", 3);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_DOWN:
-            write(d->pty_fd, "\x1b[B", 3);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_LEFT:
-            write(d->pty_fd, "\x1b[D", 3);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_RIGHT:
-            write(d->pty_fd, "\x1b[C", 3);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_HOME:
-            write(d->pty_fd, "\x1b[H", 3);
-            d->base.dirty = true;
-            return event_result_handled();
-        case KEY_END:
-            write(d->pty_fd, "\x1b[F", 3);
-            d->base.dirty = true;
-            return event_result_handled();
+        case KEY_ESC: write(d->pty_fd, "\x1b", 1); d->base.dirty = true; return event_result_handled();
+        case KEY_ENTER: write(d->pty_fd, "\r", 1); d->base.dirty = true; return event_result_handled();
+        case KEY_TAB: write(d->pty_fd, "\t", 1); d->base.dirty = true; return event_result_handled();
+        case KEY_BACKSPACE: write(d->pty_fd, "\x7f", 1); d->base.dirty = true; return event_result_handled();
+        case KEY_UP: write(d->pty_fd, "\x1b[A", 3); d->base.dirty = true; return event_result_handled();
+        case KEY_DOWN: write(d->pty_fd, "\x1b[B", 3); d->base.dirty = true; return event_result_handled();
+        case KEY_LEFT: write(d->pty_fd, "\x1b[D", 3); d->base.dirty = true; return event_result_handled();
+        case KEY_RIGHT: write(d->pty_fd, "\x1b[C", 3); d->base.dirty = true; return event_result_handled();
+        case KEY_HOME: write(d->pty_fd, "\x1b[H", 3); d->base.dirty = true; return event_result_handled();
+        case KEY_END: write(d->pty_fd, "\x1b[F", 3); d->base.dirty = true; return event_result_handled();
         case KEY_CHAR:
-            if (ev->ch == 4 && d->running) {
-                close(d->pty_fd);
-                d->pty_fd = -1;
-                d->running = false;
-            } else if (ev->ch == '/') {
-                d->search_active = true;
-                d->search_len = 0;
-                d->search_buf[0] = '\0';
-            } else if (ev->ch >= 32) {
-                write(d->pty_fd, &ev->ch, 1);
-            }
+            if (ev->ch == 4 && d->running) { close(d->pty_fd); d->pty_fd = -1; d->running = false; }
+            else if (ev->ch == '/') { d->search_active = true; d->search_len = 0; d->search_buf[0] = '\0'; }
+            else if (ev->ch >= 32) write(d->pty_fd, &ev->ch, 1);
             d->base.dirty = true;
             return event_result_handled();
         default:
@@ -241,10 +205,7 @@ static EventResult terminal_emulator_handle_event(Widget *self, Event *ev, Backe
 static void terminal_emulator_destroy(Widget *self) {
     TerminalEmulatorData *d = (TerminalEmulatorData *)(self + 1);
     if (d->pty_fd >= 0) close(d->pty_fd);
-    if (d->child_pid > 0) {
-        kill(d->child_pid, SIGTERM);
-        waitpid(d->child_pid, NULL, 0);
-    }
+    if (d->child_pid > 0) { kill(d->child_pid, SIGTERM); waitpid(d->child_pid, NULL, 0); }
     free(d->title);
     for (int i = 0; i < d->cmd_count; i++) free(d->command[i]);
     free(d->command);
@@ -276,10 +237,7 @@ Widget *terminal_emulator_widget_new(const char *title, char **command, int cmd_
 
     struct winsize ws = { .ws_row = d->term_h, .ws_col = d->term_w };
     d->child_pid = forkpty(&d->pty_fd, NULL, NULL, &ws);
-    if (d->child_pid == 0) {
-        execvp(argv[0], argv);
-        _exit(1);
-    }
+    if (d->child_pid == 0) { execvp(argv[0], argv); _exit(1); }
     if (d->pty_fd >= 0) {
         int flags = fcntl(d->pty_fd, F_GETFL, 0);
         fcntl(d->pty_fd, F_SETFL, flags | O_NONBLOCK);

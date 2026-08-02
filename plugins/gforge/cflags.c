@@ -20,8 +20,10 @@ typedef struct {
 
 extern Arena *g_session_arena;
 
-static void cf_render(Widget *self, Rect area, RenderTree *out) {
+static void cf_render(Widget *self, RenderTree *out) {
     CFData *d = (CFData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
+    Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
     int box_w = (int)(area.w * 0.6f), box_h = (int)(area.h * 0.5f);
@@ -31,17 +33,17 @@ static void cf_render(Widget *self, Rect area, RenderTree *out) {
     const char *vals[] = {d->cflags, d->cxxflags, d->makeopts, d->rustflags};
     RenderTree *c = arena_alloc(g_session_arena, 5 * sizeof(RenderTree));
     c[0].type = RNODE_TEXT; c[0].rect = rect_new(1, 0, box_w - 2, 1);
-    c[0].text.content = arena_strdup(g_session_arena, d->title);
+    c[0].u.text.content = arena_strdup(g_session_arena, d->title);
     c[0].style_class = "text"; c[0].state = "title";
     for (int i = 0; i < 4; i++) {
         c[1+i].type = RNODE_TEXT; c[1+i].rect = rect_new(1, 1+i, box_w - 2, 1);
         char buf[512]; snprintf(buf, sizeof(buf), "%s %s: %s", i == d->field ? ">" : " ", labels[i], vals[i]);
-        c[1+i].text.content = arena_strdup(g_session_arena, buf);
+        c[1+i].u.text.content = arena_strdup(g_session_arena, buf);
         c[1+i].style_class = "text";
     }
     out->type = RNODE_CONTAINER; out->rect = rect_new(box_x, box_y, box_w, box_h);
-    out->container.border = BORDER_SINGLE; out->container.padding = edgeinsets_zero();
-    out->container.children = c; out->container.child_count = 5;
+    out->u.container.border = BORDER_SINGLE; out->u.container.padding = edgeinsets_zero();
+    out->u.container.children = c; out->u.container.child_count = 5;
 }
 
 static EventResult cf_handle(Widget *self, Event *ev, Backend *backend) {
