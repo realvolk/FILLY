@@ -1,5 +1,12 @@
 # Changelog
 
+
+## (2026-08-03) — FILLY
+
+### Housekeeping
+- Added ForgeLFS plugin pack (`forge_hub`, `forge_anvil`) for LFS-style system construction
+- Everything else I did not document
+
 ## v0.5.1 (2026-08-02) — FILLY
 
 ### Changed

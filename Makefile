@@ -104,6 +104,10 @@ PLUGIN_GFORGE_SRCS = plugins/gforge/plugin.c \
                       plugins/gforge/use_flags.c \
                       plugins/gforge/cflags.c
 
+PLUGIN_FORGELFS_SRCS = plugins/forgelfs/plugin.c \
+                        plugins/forgelfs/forge_hub.c \
+                        plugins/forgelfs/forge_anvil.c
+
 TEST_SRCS = $(filter-out src/cli/main.c, $(SRCS)) $(GCORE_SRCS)
 
 LIBFILLY_SRCS = $(filter-out src/cli/main.c src/backend/daemon/daemon.c, $(SRCS)) $(GCORE_SRCS)
@@ -116,12 +120,15 @@ filly: $(SRCS) $(GCORE_SRCS) src/cJSON.o
 src/cJSON.o: src/cJSON.c src/cJSON.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-plugins: libartixforge.so libgforge.so
+plugins: libartixforge.so libgforge.so libforgelfs.so
 
 libartixforge.so: $(PLUGIN_ARTIXFORGE_SRCS)
 	$(CC) $(CFLAGS) -fPIC -Wno-misleading-indentation -shared -Wl,--unresolved-symbols=ignore-all -o $@ $^
 
 libgforge.so: $(PLUGIN_GFORGE_SRCS)
+	$(CC) $(CFLAGS) -fPIC -shared -Wl,--unresolved-symbols=ignore-all -o $@ $^
+
+libforgelfs.so: $(PLUGIN_FORGELFS_SRCS)
 	$(CC) $(CFLAGS) -fPIC -shared -Wl,--unresolved-symbols=ignore-all -o $@ $^
 
 libfilly.so: $(LIBFILLY_SRCS) src/cJSON.o
@@ -244,7 +251,9 @@ lint:
 cppcheck:
 	cppcheck --enable=all --suppress=missingIncludeSystem --std=c99 -Isrc -Isrc/filly-port src/
 
+plugins: libartixforge.so libgforge.so libforgelfs.so
+
 clean:
-	rm -f filly filly-build src/cJSON.o libartixforge.so libgforge.so libfilly.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz
+	rm -f filly filly-build src/cJSON.o libartixforge.so libgforge.so libforgelfs.so libfilly.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz
 
 .PHONY: all plugins install clean test test-unit test-fuzz test-fault test-bench tools bindings lint cppcheck
