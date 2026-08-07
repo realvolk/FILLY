@@ -22,6 +22,8 @@ typedef struct {
     int mouse_x, mouse_y;
     int mouse_button;
     int drag_start_x, drag_start_y;
+    int drag_widget_x, drag_widget_y;
+    char *drag_target;
     bool dragging;
     Event event_queue[EVENT_QUEUE_SIZE];
     int queue_head, queue_tail;

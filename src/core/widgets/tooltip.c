@@ -14,6 +14,9 @@ static void tooltip_render(Widget *self, RenderTree *out) {
     out->rect = area;
     out->u.text.content = d->text;
     out->style_class = "text";
+    out->accessible.role = "tooltip";
+    out->accessible.label = d->text;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
 }
 
 static EventResult tooltip_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -32,6 +35,7 @@ Widget *tooltip_widget_new(const char *text) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(TooltipData));
     TooltipData *d = (TooltipData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->text = strdup(text);
     w->vtable.render = tooltip_render;
     w->vtable.handle_event = tooltip_handle_event;

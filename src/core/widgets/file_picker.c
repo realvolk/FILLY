@@ -53,6 +53,9 @@ static void file_picker_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "file-picker";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = (int)(area.w * 0.7f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.75f);
@@ -153,6 +156,7 @@ Widget *file_picker_widget_new(const char *title, const char *start_dir, const c
         .entry_count = 0,
         .selected = 0
     };
+    data.base.tab_index = -1;
     fp_populate(&data);
     widget_base_init(w, &data, sizeof(FilePickerData), file_picker_render, file_picker_handle_event, fp_destroy);
     return w;

@@ -1,5 +1,65 @@
 # Changelog
 
+# Changelog
+
+## v0.6.0 (2026-08-07) — FILLY
+
+### Added
+- **Free widget positioning** — anchor mode (9-point surface snapping), absolute mode (fixed x/y coordinates), relative mode (offset from parent or sibling widget); `anchor`, `x`, `y`, `relative_to`, `dx`, `dy` fields in widget requests
+- **Z-ordering** — `z_index` field on render nodes; children sorted by z-index before layout pass
+- **Overflow control** — `overflow` property with `visible`, `clip`, and `scroll` modes; clipping enforced in layout pass
+- **Flexbox layout** — `RNODE_FLEX` container with direction, wrap, justify, align properties; equal-grow distribution with min/max constraint enforcement
+- **Grid layout** — `RNODE_GRID` container with column/row cell placement; auto-row calculation
+- **Min/max width and height constraints** — enforced in layout pass for all node types
+- **Drop shadows** — multi-shadow support via `ShadowLayer` array (up to 4 layers); offset, blur, spread, color per layer; GPU rendering with alpha-blended blur
+- **Gradients** — linear and radial gradients with multi-stop color interpolation; `bg_gradient` object with type, angle, center, stops
+- **Per-side borders** — independent border widths, colors, and styles (solid, dashed, dotted) per side
+- **Opacity** — per-widget alpha blending in GPU backend
+- **Backdrop blur** — `backdrop_blur` property for modal overlays
+- **Cursor styles** — `cursor` property mapping to system cursor themes (default, pointer, text, move, resize-*, not-allowed)
+- **Incremental streaming** — `stream_start`/`stream_frame`/`stream_end` protocol messages emitted when client negotiates `streaming` capability; `session_compute_delta` frame diffing function
+- **Font shaping engine** — kerning pair lookup via font kern table + GPOS fallback; ligature substitution for fi/fl/ff/ffi/ffl/ft/st; `ShapedText` output with per-glyph positions
+- **Vector graphics engine** — SVG-style path parser supporting M/m, L/l, H/h, V/v, Q/q, T/t, C/c, S/s, Z/z commands with relative/absolute modes and smooth curve reflection; rasterization via stb_truetype
+- **5 new widget types** — image (PNG/JPEG/BMP with fit modes via stb_image), canvas (FIL-controlled drawable surface with rect/line/clear commands), markdown (headers, lists, styled text), plot (line/bar charts with labels), video (GPU-only playback); 41 total widgets
+- **Focus system** — `tab_index` on render nodes and `WidgetBase`; Tab/Shift+Tab walks focusable widgets in order; `focused_widget_id` tracked globally; focus ring rendered as pulsing rectangle in GPU backend
+- **Tooltip system** — `tooltip` string field on all widgets; 500ms hover timer tracked per-node; tooltip overlay rendered at cursor position with smart edge avoidance
+- **Right-click context menu** — mouse button 3 dispatches as F2 event to widget
+- **Drag-and-drop** — `draggable` flag on widgets; `EVENT_MOUSE_DRAG_START`/`MOVE`/`END` events generated with 5px dead zone
+- **Plugin security hardening** — multi-key pinning with expiry via `TrustedKey` array; SHA256 hash verification via `.sha256` files; sandboxed by default with tightened seccomp filters (5s CPU limit, 256MB memory, `KILL_PROCESS` action)
+- **Accessibility AT-SPI bridge** — compile-time optional (`-DFILLY_ACCESSIBILITY`); walks RenderTree each frame pushing JSON objects with role/name/position to AT-SPI bus; announces focus changes
+- **CLI commands** — `filly inspect` for daemon connectivity check; `filly profile` for FPS/arena/reduced-motion stats
+- **Handshake capability negotiation** — client declares supported features; daemon responds with negotiated intersection of 10 capability flags
+- **Session state tracking** — `session_prefers_reduced_motion` from `FILLY_REDUCED_MOTION` environment variable
+- **Config** — `prefers_reduced_motion` boolean flag in `filly.conf`
+
+### Changed
+- **RenderTree expanded** — 9 new node types: `RNODE_FLEX`, `RNODE_GRID`, `RNODE_VECTOR`, `RNODE_RICH_TEXT`, `RNODE_IMAGE`, `RNODE_CANVAS`, `RNODE_MARKDOWN`, `RNODE_PLOT`, `RNODE_VIDEO`
+- **WidgetStyle expanded** — `ShadowLayer shadows[MAX_SHADOWS]` replacing single shadow fields; `Gradient gradient` replacing flat gradient properties; `backdrop_blur`, `letter_spacing`, `line_height`, `text_transform`, `cursor_style` added; per-side border fields added
+- **Animation engine extended** — three cubic easing functions; rect position/size interpolation; multi-shadow and gradient stop lerp; `prefers_reduced_motion` flag skips interpolation; TUI animations (slide-in, fade, typewriter reveal)
+- **Layout engine rewritten** — recursive `layout_node` with z-ordered children, 9-point anchor computation, absolute/relative positioning, overflow clamping, flexbox, grid
+- **Theme engine extended** — parses shadow arrays, gradient objects with stops, per-side borders, backdrop blur, letter spacing, line height, text transform, cursor style; backward-compatible with legacy properties
+- **All 10 themes updated** — v2.0 widget style properties (shadows, cursors, transitions), 9 named animation definitions each (fade-in, slide-up, slide-down, scale-in, pulse, bounce-in, shake, glow, typewriter) with theme-specific accent colors; High Contrast and Large Print disable animations
+- **Protocol extended** — `WidgetRequest` gains 11 new fields; `position` and `query` message types
+- **Daemon thread safety** — `pthread_rwlock_t` on session table and theme registry
+- **GPU backend** — focus ring rendering, flex/grid hit testing, drag-and-drop tracking
+- **GPU renderer** — kerning-aware text via shaper, shadow/gradient/opacity/border rendering, vector rasterization, plot line/bar charts
+- **Terminal renderer** — TUI animation states, new node type placeholders, dashed/dotted borders, animation timing
+- **Binary size** — 445 KB (within 500 KB budget)
+
+### Fixed
+- **stb_truetype.h C99 compliance** — forward-declared rect pack structs; provided static implementations for `stbrp_init_target` and `stbrp_pack_rects`
+- **Variable shadowing** — `render_node` style pointer renamed to `ws`; plot loop variable renamed to `step`
+- **Global symbol resolution** — focus/tooltip tracking variables made non-static for cross-file references
+- **Terminal animation timing** — `wait_frame` uses `usleep(16000)` for POSIX compatibility
+- **Daemon session paths** — `g_active_store` set on all session creation paths
+
+### Housekeeping
+- 41 widgets: 36 original + image, canvas, markdown, plot, video
+- 3 plugin packs: ArtixForge (10), GForge (7), ForgeLFS (2)
+- New source files: `shaper.c`, `vector.c`, `accessibility.c`, `image.c`, `canvas.c`, `markdown.c`, `plot.c`, `video.c`
+- New test files: `v2_pixel_test.c`, `v2_behavior.sh`, `harness_v2.sh`
+- `stb_image.h` added for PNG/JPEG/BMP decoding
+- `Makefile` updated with all new sources, targets, and `-Wno-pedantic` flag
 
 ## (2026-08-03) — FILLY
 

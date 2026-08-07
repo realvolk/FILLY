@@ -120,6 +120,9 @@ static void progress_render(Widget *self, RenderTree *out) {
     if (d->child_pid > 0) progress_update(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "progress";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     int box_w = (int)(area.w * 0.8f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.8f);
@@ -212,6 +215,7 @@ Widget *progress_widget_new(const char *title, char **command, int cmd_count, co
         .yield_fd = -1,
         .last_yielded_progress = -1
     };
+    data.base.tab_index = -1;
     data.command = malloc(cmd_count * sizeof(char *));
     for (int i = 0; i < cmd_count; i++) data.command[i] = strdup(command[i]);
     widget_base_init(w, &data, sizeof(ProgressData), progress_render, progress_handle_event, progress_destroy);

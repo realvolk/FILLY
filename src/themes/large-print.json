@@ -4,7 +4,9 @@
     "font_size": 24
   },
   "global": {
-    "font_size": "$font_size"
+    "font_size": "$font_size",
+    "transition_ms": 0
   },
-  "widgets": {}
+  "widgets": {},
+  "animations": {}
 }

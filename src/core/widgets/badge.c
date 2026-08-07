@@ -17,6 +17,8 @@ static void badge_render(Widget *self, RenderTree *out) {
     out->rect = rect_new(0, 0, text_w, ch);
     out->u.badge.text = d->text;
     out->style_class = "badge";
+    out->accessible.role = "label";
+    out->accessible.label = d->text;
 }
 
 static EventResult badge_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -35,6 +37,7 @@ Widget *badge_widget_new(const char *text) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(BadgeData));
     BadgeData *d = (BadgeData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->text = strdup(text);
     w->vtable.render = badge_render;
     w->vtable.handle_event = badge_handle_event;

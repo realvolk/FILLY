@@ -7,6 +7,7 @@ typedef struct {
     bool dirty;
     bool accepts_text_input;
     Rect render_area;
+    int tab_index;
 } WidgetBase;
 
 void widget_base_init(Widget *w, void *data, size_t data_size,

@@ -48,6 +48,9 @@ static void text_editor_render(Widget *self, RenderTree *out) {
     te_clamp_cursor(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "text-editor";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = (int)(area.w * 0.9f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.9f);
@@ -138,6 +141,7 @@ Widget *text_editor_widget_new(const char *title, const char *file_path, const c
     TextEditorData *d = (TextEditorData *)(w + 1);
     d->base.dirty = true;
     d->base.accepts_text_input = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     d->file_path = file_path ? strdup(file_path) : NULL;
     d->lines = NULL;

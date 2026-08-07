@@ -13,6 +13,9 @@ static void yesno_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "yesno";
+    out->accessible.label = d->title ? d->title : "Confirm";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 50, box_h = 10;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -86,6 +89,7 @@ Widget *yesno_widget_new(const char *title, const char *message, bool default_ye
     Widget *w = calloc(1, sizeof(Widget) + sizeof(YesNoData));
     YesNoData *d = (YesNoData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : NULL;
     d->message = message ? strdup(message) : NULL;
     d->selected_yes = default_yes;

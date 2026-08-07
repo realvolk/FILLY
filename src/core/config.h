@@ -10,6 +10,7 @@ typedef struct {
     int inactivity_timeout;
     bool sandbox;
     int max_connections_per_sec;
+    bool prefers_reduced_motion;
 } FillyConfig;
 
 void config_load(FillyConfig *cfg, const char *path);

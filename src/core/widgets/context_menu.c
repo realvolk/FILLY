@@ -13,6 +13,9 @@ static void cm_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "menu";
+    out->accessible.label = "Context menu";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 25, box_h = d->count + 2;
     if (box_w > area.w - 4) box_w = area.w - 4;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -68,6 +71,7 @@ Widget *context_menu_widget_new(char **items, int count) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(ContextMenuData));
     ContextMenuData *d = (ContextMenuData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->items = malloc(count * sizeof(char *));
     d->count = count;
     for (int i = 0; i < count; i++) d->items[i] = strdup(items[i]);

@@ -1,3 +1,4 @@
+#define STB_RECT_PACK_VERSION 1
 #if 0
 #define STB_TRUETYPE_IMPLEMENTATION  // force following include to generate implementation
 #include "stb_truetype.h"

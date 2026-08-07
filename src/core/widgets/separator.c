@@ -14,6 +14,9 @@ static void separator_render(Widget *self, RenderTree *out) {
     out->rect = area;
     out->u.separator.orientation = d->orientation;
     out->style_class = "separator";
+    out->accessible.role = "separator";
+    out->accessible.label = "";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
 }
 
 static EventResult separator_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -30,6 +33,7 @@ Widget *separator_widget_new(Orientation orientation) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SeparatorData));
     SeparatorData *d = (SeparatorData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->orientation = orientation;
     w->vtable.render = separator_render;
     w->vtable.handle_event = separator_handle_event;

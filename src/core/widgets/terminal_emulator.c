@@ -72,6 +72,9 @@ static void terminal_emulator_render(Widget *self, RenderTree *out) {
     te_read_output(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "terminal";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
 
     RenderTree *children = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
 
@@ -217,6 +220,7 @@ Widget *terminal_emulator_widget_new(const char *title, char **command, int cmd_
     TerminalEmulatorData *d = (TerminalEmulatorData *)(w + 1);
     d->base.dirty = true;
     d->base.accepts_text_input = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : strdup("Terminal");
     d->cmd_count = cmd_count;
     d->command = malloc(cmd_count * sizeof(char *));

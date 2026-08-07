@@ -13,6 +13,9 @@ static void msg_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "message";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
 
     int msg_lines = 1;
     for (const char *p = d->message; *p; p++) if (*p == '\n') msg_lines++;
@@ -71,6 +74,7 @@ Widget *msg_widget_new(const char *title, const char *message) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(MsgData));
     MsgData *d = (MsgData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     d->message = strdup(message);
     w->vtable.render = msg_render;

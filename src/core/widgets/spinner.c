@@ -13,6 +13,9 @@ static void spinner_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "spinner";
+    out->accessible.label = d->message;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     int box_w = 40, box_h = 5;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -53,6 +56,7 @@ Widget *spinner_widget_new(const char *message) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SpinnerData));
     SpinnerData *d = (SpinnerData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->message = strdup(message);
     d->frame = 0;
     w->vtable.render = spinner_render;

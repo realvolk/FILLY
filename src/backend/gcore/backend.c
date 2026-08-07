@@ -328,6 +328,9 @@ bool gcore_backend_init(GCoreBackend *g, GCoreOutput output, const char *display
     g->dragging = false;
     g->drag_start_x = 0;
     g->drag_start_y = 0;
+    g->drag_widget_x = 0;
+    g->drag_widget_y = 0;
+    g->drag_target = NULL;
     gcore_init_font(NULL, 14);
     if (getenv("WAYLAND_DISPLAY")) { if (setup_wayland(g) == 0) { g->output = GCORE_WAYLAND; return true; } }
     if (getenv("DISPLAY")) { if (setup_x11(g) == 0) { g->output = GCORE_X11; return true; } }
@@ -349,6 +352,10 @@ static void free_tree_copy(RenderTree *t) {
     if (!t) return;
     if (t->type == RNODE_CONTAINER && t->u.container.children)
         free(t->u.container.children);
+    if (t->type == RNODE_FLEX && t->u.flex.children)
+        free(t->u.flex.children);
+    if (t->type == RNODE_GRID && t->u.grid.children)
+        free(t->u.grid.children);
     free(t);
 }
 
@@ -363,6 +370,20 @@ static RenderTree *copy_tree_malloc(RenderTree *src) {
             memcpy(&dst->u.container.children[i], child, sizeof(RenderTree));
             free(child);
         }
+    } else if (src->type == RNODE_FLEX && src->u.flex.child_count > 0) {
+        dst->u.flex.children = malloc(src->u.flex.child_count * sizeof(RenderTree));
+        for (int i = 0; i < src->u.flex.child_count; i++) {
+            RenderTree *child = copy_tree_malloc(&src->u.flex.children[i]);
+            memcpy(&dst->u.flex.children[i], child, sizeof(RenderTree));
+            free(child);
+        }
+    } else if (src->type == RNODE_GRID && src->u.grid.child_count > 0) {
+        dst->u.grid.children = malloc(src->u.grid.child_count * sizeof(RenderTree));
+        for (int i = 0; i < src->u.grid.child_count; i++) {
+            RenderTree *child = copy_tree_malloc(&src->u.grid.children[i]);
+            memcpy(&dst->u.grid.children[i], child, sizeof(RenderTree));
+            free(child);
+        }
     } else {
         dst->u.container.children = NULL;
     }
@@ -372,6 +393,7 @@ static RenderTree *copy_tree_malloc(RenderTree *src) {
 void gcore_backend_destroy(GCoreBackend *g) {
     if (!g) return;
     if (g->render_tree) free_tree_copy(g->render_tree);
+    free(g->drag_target);
     if (g->output == GCORE_DRM) {
         LibInputData *li = g->li_data; if (li && li->li) libinput_unref(li->li); free(li);
         DRMData *d = g->drm_data;
@@ -395,6 +417,15 @@ void gcore_backend_destroy(GCoreBackend *g) {
 }
 
 bool gcore_backend_setup(void *self) { (void)self; return true; }
+
+static void draw_focus_ring(PixelBuffer *pb, int x, int y, int w, int h, long long now_ms) {
+    int phase = (now_ms / 500) % 2;
+    uint32_t color = phase ? 0xFFe94560 : 0xFFFFffff;
+    gcore_draw_rect(pb, x, y, w, 2, color);
+    gcore_draw_rect(pb, x, y + h - 2, w, 2, color);
+    gcore_draw_rect(pb, x, y, 2, h, color);
+    gcore_draw_rect(pb, x + w - 2, y, 2, h, color);
+}
 
 bool gcore_backend_draw(void *self, RenderTree *tree) {
     GCoreBackend *g = (GCoreBackend *)self;
@@ -421,11 +452,12 @@ bool gcore_backend_draw(void *self, RenderTree *tree) {
         ws->opacity = tree->prev_resolved_style.opacity + (ws->opacity - tree->prev_resolved_style.opacity) * t;
         ws->border_radius = (int)(tree->prev_resolved_style.border_radius + (ws->border_radius - tree->prev_resolved_style.border_radius) * t);
         ws->font_size = (int)(tree->prev_resolved_style.font_size + (ws->font_size - tree->prev_resolved_style.font_size) * t);
-        ws->shadow_offset_x = (int)(tree->prev_resolved_style.shadow_offset_x + (ws->shadow_offset_x - tree->prev_resolved_style.shadow_offset_x) * t);
-        ws->shadow_offset_y = (int)(tree->prev_resolved_style.shadow_offset_y + (ws->shadow_offset_y - tree->prev_resolved_style.shadow_offset_y) * t);
-        ws->shadow_blur = (int)(tree->prev_resolved_style.shadow_blur + (ws->shadow_blur - tree->prev_resolved_style.shadow_blur) * t);
-        ws->shadow_color = lerp_color(tree->prev_resolved_style.shadow_color, ws->shadow_color, t);
-        ws->bg_gradient_to = lerp_color(tree->prev_resolved_style.bg_gradient_to, ws->bg_gradient_to, t);
+        for (int i = 0; i < ws->shadow_count; i++) {
+            ws->shadows[i].offset_x = (int)(tree->prev_resolved_style.shadows[i].offset_x + (ws->shadows[i].offset_x - tree->prev_resolved_style.shadows[i].offset_x) * t);
+            ws->shadows[i].offset_y = (int)(tree->prev_resolved_style.shadows[i].offset_y + (ws->shadows[i].offset_y - tree->prev_resolved_style.shadows[i].offset_y) * t);
+            ws->shadows[i].blur = (int)(tree->prev_resolved_style.shadows[i].blur + (ws->shadows[i].blur - tree->prev_resolved_style.shadows[i].blur) * t);
+            ws->shadows[i].color = lerp_color(tree->prev_resolved_style.shadows[i].color, ws->shadows[i].color, t);
+        }
         ws->scale_x = tree->prev_resolved_style.scale_x + (ws->scale_x - tree->prev_resolved_style.scale_x) * t;
         ws->scale_y = tree->prev_resolved_style.scale_y + (ws->scale_y - tree->prev_resolved_style.scale_y) * t;
         ws->rotation = tree->prev_resolved_style.rotation + (ws->rotation - tree->prev_resolved_style.rotation) * t;
@@ -434,6 +466,17 @@ bool gcore_backend_draw(void *self, RenderTree *tree) {
     }
 
     gcore_render_tree_to_pixels(tree, &g->pb, g->theme, g->arena);
+
+    extern char *focused_widget_id;
+    if (focused_widget_id && focused_widget_id[0]) {
+        long long now = time_ms();
+        int abs_x = 0, abs_y = 0;
+        RenderTree *focus = hit_test(tree, -1, -1, 0, 0, &abs_x, &abs_y);
+        if (focus && focus->style_class && strcmp(focus->style_class, focused_widget_id) == 0) {
+            draw_focus_ring(&g->pb, abs_x, abs_y, focus->rect.w, focus->rect.h, now);
+        }
+    }
+
 #ifdef FILLY_PROFILING
     {
         extern double session_current_fps;
@@ -459,11 +502,25 @@ bool gcore_backend_draw(void *self, RenderTree *tree) {
 static RenderTree *hit_test(RenderTree *node, int px, int py, int off_x, int off_y, int *abs_x, int *abs_y) {
     if (!node) return NULL;
     int x = off_x + node->rect.x, y = off_y + node->rect.y, w = node->rect.w, h = node->rect.h;
-    if (px < x || px >= x + w || py < y || py >= y + h) return NULL;
+    if (px >= 0 && py >= 0 && (px < x || px >= x + w || py < y || py >= y + h)) return NULL;
     if (node->type == RNODE_CONTAINER && node->u.container.children) {
         for (int i = node->u.container.child_count - 1; i >= 0; i--) {
             int cx, cy;
             RenderTree *hit = hit_test(&node->u.container.children[i], px, py, x, y, &cx, &cy);
+            if (hit) { if (abs_x) *abs_x = cx; if (abs_y) *abs_y = cy; return hit; }
+        }
+    }
+    if (node->type == RNODE_FLEX && node->u.flex.children) {
+        for (int i = node->u.flex.child_count - 1; i >= 0; i--) {
+            int cx, cy;
+            RenderTree *hit = hit_test(&node->u.flex.children[i], px, py, x, y, &cx, &cy);
+            if (hit) { if (abs_x) *abs_x = cx; if (abs_y) *abs_y = cy; return hit; }
+        }
+    }
+    if (node->type == RNODE_GRID && node->u.grid.children) {
+        for (int i = node->u.grid.child_count - 1; i >= 0; i--) {
+            int cx, cy;
+            RenderTree *hit = hit_test(&node->u.grid.children[i], px, py, x, y, &cx, &cy);
             if (hit) { if (abs_x) *abs_x = cx; if (abs_y) *abs_y = cy; return hit; }
         }
     }
@@ -553,6 +610,14 @@ Event gcore_backend_next_event(void *self) {
                 int dy = g->mouse_y - g->drag_start_y;
                 if (abs(dx) > 5 || abs(dy) > 5) {
                     g->dragging = true;
+                    int abs_x = 0, abs_y = 0;
+                    RenderTree *hit = hit_test(g->render_tree, g->drag_start_x, g->drag_start_y, 0, 0, &abs_x, &abs_y);
+                    if (hit && hit->draggable && hit->style_class) {
+                        free(g->drag_target);
+                        g->drag_target = strdup(hit->style_class);
+                        g->drag_widget_x = hit->rect.x;
+                        g->drag_widget_y = hit->rect.y;
+                    }
                     Event dev = { .type = EVENT_MOUSE_DRAG_START, .x = g->mouse_x, .y = g->mouse_y,
                                   .button = g->mouse_button, .drag_start_x = g->drag_start_x,
                                   .drag_start_y = g->drag_start_y, .drag_dx = dx, .drag_dy = dy };
@@ -592,12 +657,17 @@ Event gcore_backend_next_event(void *self) {
                                   .drag_start_y = g->drag_start_y,
                                   .drag_dx = g->mouse_x - g->drag_start_x,
                                   .drag_dy = g->mouse_y - g->drag_start_y };
+                    free(g->drag_target);
+                    g->drag_target = NULL;
                     g->dragging = false;
                     g->mouse_button = 0;
+                    libinput_event_destroy(event);
                     return dev;
                 }
                 g->mouse_button = 0;
                 g->dragging = false;
+                free(g->drag_target);
+                g->drag_target = NULL;
                 ev.type = EVENT_MOUSE_BUTTON; ev.x = g->mouse_x; ev.y = g->mouse_y;
                 ev.button = button; ev.mouse_state = MOUSE_RELEASE;
             }
@@ -676,12 +746,54 @@ Event gcore_backend_next_event(void *self) {
             }
         } else if (xe.type == ButtonPress) {
             g->mouse_x = xe.xbutton.x; g->mouse_y = xe.xbutton.y;
+            g->mouse_button = xe.xbutton.button;
+            g->drag_start_x = g->mouse_x;
+            g->drag_start_y = g->mouse_y;
+            g->dragging = false;
             int abs_x = 0, abs_y = 0;
             RenderTree *hit = hit_test(g->render_tree, g->mouse_x, g->mouse_y, 0, 0, &abs_x, &abs_y);
             synthesize_key_events(g, hit, g->mouse_x, g->mouse_y, abs_x, abs_y);
             return dequeue_event(g);
+        } else if (xe.type == ButtonRelease) {
+            if (g->dragging) {
+                Event dev = { .type = EVENT_MOUSE_DRAG_END, .x = g->mouse_x, .y = g->mouse_y,
+                              .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                              .drag_start_y = g->drag_start_y,
+                              .drag_dx = g->mouse_x - g->drag_start_x,
+                              .drag_dy = g->mouse_y - g->drag_start_y };
+                free(g->drag_target); g->drag_target = NULL;
+                g->dragging = false; g->mouse_button = 0;
+                return dev;
+            }
+            g->mouse_button = 0;
+            g->dragging = false;
         } else if (xe.type == MotionNotify) {
             g->mouse_x = xe.xmotion.x; g->mouse_y = xe.xmotion.y;
+            if (g->mouse_button && !g->dragging) {
+                int dx = g->mouse_x - g->drag_start_x;
+                int dy = g->mouse_y - g->drag_start_y;
+                if (abs(dx) > 5 || abs(dy) > 5) {
+                    g->dragging = true;
+                    int abs_x = 0, abs_y = 0;
+                    RenderTree *hit = hit_test(g->render_tree, g->drag_start_x, g->drag_start_y, 0, 0, &abs_x, &abs_y);
+                    if (hit && hit->draggable && hit->style_class) {
+                        free(g->drag_target);
+                        g->drag_target = strdup(hit->style_class);
+                    }
+                    Event dev = { .type = EVENT_MOUSE_DRAG_START, .x = g->mouse_x, .y = g->mouse_y,
+                                  .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                                  .drag_start_y = g->drag_start_y, .drag_dx = dx, .drag_dy = dy };
+                    return dev;
+                }
+            }
+            if (g->dragging) {
+                Event dev = { .type = EVENT_MOUSE_DRAG_MOVE, .x = g->mouse_x, .y = g->mouse_y,
+                              .button = g->mouse_button, .drag_start_x = g->drag_start_x,
+                              .drag_start_y = g->drag_start_y,
+                              .drag_dx = g->mouse_x - g->drag_start_x,
+                              .drag_dy = g->mouse_y - g->drag_start_y };
+                return dev;
+            }
             ev.type = EVENT_MOUSE_MOTION; ev.x = g->mouse_x; ev.y = g->mouse_y; ev.mouse_state = MOUSE_MOTION;
         } else if (xe.type == ClientMessage && (Atom)xe.xclient.data.l[0] == x->wm_delete_window) {
             ev.type = EVENT_KEY; ev.code = KEY_ESC;
@@ -709,6 +821,9 @@ Event gcore_backend_next_event(void *self) {
         }
         if (ev.type == EVENT_MOUSE_BUTTON && ev.mouse_state == MOUSE_PRESS) {
             g->mouse_x = ev.x; g->mouse_y = ev.y;
+            g->mouse_button = ev.button;
+            g->drag_start_x = ev.x; g->drag_start_y = ev.y;
+            g->dragging = false;
             int abs_x = 0, abs_y = 0;
             RenderTree *hit = hit_test(g->render_tree, ev.x, ev.y, 0, 0, &abs_x, &abs_y);
             synthesize_key_events(g, hit, ev.x, ev.y, abs_x, abs_y);

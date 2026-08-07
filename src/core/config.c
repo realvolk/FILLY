@@ -17,6 +17,7 @@ void config_defaults(FillyConfig *cfg) {
     cfg->inactivity_timeout = 30;
     cfg->sandbox = false;
     cfg->max_connections_per_sec = 10;
+    cfg->prefers_reduced_motion = false;
 }
 
 void config_load(FillyConfig *cfg, const char *path) {
@@ -51,6 +52,7 @@ void config_load(FillyConfig *cfg, const char *path) {
         else if (strcmp(key, "inactivity_timeout") == 0) cfg->inactivity_timeout = atoi(val);
         else if (strcmp(key, "sandbox") == 0) cfg->sandbox = strcmp(val, "true") == 0 || strcmp(val, "1") == 0;
         else if (strcmp(key, "max_connections_per_sec") == 0) cfg->max_connections_per_sec = atoi(val);
+        else if (strcmp(key, "prefers_reduced_motion") == 0) cfg->prefers_reduced_motion = strcmp(val, "true") == 0 || strcmp(val, "1") == 0;
     }
     fclose(f);
 }

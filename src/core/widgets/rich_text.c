@@ -10,10 +10,13 @@ static void rich_text_render(Widget *self, RenderTree *out) {
     WidgetBase *base = (WidgetBase *)(self + 1);
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
-    out->type = RNODE_TEXT;
+    out->type = RNODE_RICH_TEXT;
     out->rect = area;
-    out->u.text.content = d->content;
-    out->style_class = "text";
+    out->u.rich_text.spans = d->content;
+    out->style_class = "rich_text";
+    out->accessible.role = "text";
+    out->accessible.label = d->content;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
 }
 
 static EventResult rich_text_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -32,6 +35,7 @@ Widget *rich_text_widget_new(const char *content) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(RichTextData));
     RichTextData *d = (RichTextData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->content = strdup(content);
     w->vtable.render = rich_text_render;
     w->vtable.handle_event = rich_text_handle_event;

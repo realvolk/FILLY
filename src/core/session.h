@@ -11,6 +11,10 @@ extern Theme *g_active_theme;
 extern Store *g_active_store;
 extern double session_current_fps;
 extern Arena *g_session_arena;
+extern bool session_prefers_reduced_motion;
+
+typedef struct { int id; Rect rect; } DirtyNode;
+typedef struct { DirtyNode *nodes; int count; } FrameDelta;
 
 WidgetResponse session_run(Widget *w, Backend *backend);
 void session_set_clipboard(ClipboardInterface *ci);
@@ -20,3 +24,5 @@ void session_load_keymap(const char *key, KeyCode code, char ch);
 void session_clear_keymap(void);
 struct FilResult;
 void session_load_keymap_from_fil(struct FilResult *fr);
+FrameDelta session_compute_delta(RenderTree *current, RenderTree *previous);
+void session_free_delta(FrameDelta *delta);

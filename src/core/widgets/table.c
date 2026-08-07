@@ -23,6 +23,9 @@ static void table_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "table";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
 
     int box_w = (int)(area.w * 0.9f);
     if (box_w > area.w - 2) box_w = area.w - 2;
@@ -127,6 +130,7 @@ Widget *table_widget_new(const char *title, char **headers, int header_count, ch
         .selected_row = 0,
         .selected_col = 0
     };
+    data.base.tab_index = -1;
     data.headers = malloc(header_count * sizeof(char *));
     for (int i = 0; i < header_count; i++) data.headers[i] = strdup(headers[i]);
     data.rows = malloc(row_count * sizeof(char **));

@@ -34,15 +34,15 @@ bool sandbox_spawn(const char *so_path, const char *widget_name, const char *jso
         close(handle->pipe_fd[0]);
 
         struct rlimit limit;
-        limit.rlim_cur = 128 * 1024 * 1024;
-        limit.rlim_max = 128 * 1024 * 1024;
+        limit.rlim_cur = 256 * 1024 * 1024;
+        limit.rlim_max = 256 * 1024 * 1024;
         setrlimit(RLIMIT_AS, &limit);
-        limit.rlim_cur = 2;
-        limit.rlim_max = 2;
+        limit.rlim_cur = 5;
+        limit.rlim_max = 5;
         setrlimit(RLIMIT_CPU, &limit);
 
 #if FILLY_SECCOMP
-        scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_KILL);
+        scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_KILL_PROCESS);
         if (ctx) {
             seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
             seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(close), 0);
@@ -55,11 +55,14 @@ bool sandbox_spawn(const char *so_path, const char *widget_name, const char *jso
             seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(fstat), 0);
             seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), 0);
             seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
+            seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), 0);
+            seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(newfstatat), 0);
+            seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(getrandom), 0);
             seccomp_load(ctx);
             seccomp_release(ctx);
         }
 #elif FILLY_PLEDGE
-        pledge("stdio", NULL);
+        pledge("stdio rpath", NULL);
 #endif
 
         void *lib = dlopen(so_path, RTLD_NOW);

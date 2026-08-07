@@ -15,7 +15,8 @@
     "accent_color": "$accent",
     "border_color": "$border",
     "border_width": 2,
-    "padding": [10, 16, 10, 16]
+    "padding": [10, 16, 10, 16],
+    "transition_ms": 0
   },
   "widgets": {
     "text": { "fg_color": "$fg" },
@@ -23,6 +24,19 @@
     "text:muted": { "fg_color": "$muted" },
     "list": { "bg_color": "$bg" },
     "list:selected": { "bg_color": "$accent", "fg_color": "#000000" },
-    "container": { "border_color": "$border", "border_width": 2 }
-  }
+    "container": { "border_color": "$border", "border_width": 2 },
+    "input": {
+      "cursor": "text"
+    },
+    "button": {
+      "cursor": "pointer"
+    },
+    "toggle": {
+      "cursor": "pointer"
+    },
+    "checkbox": {
+      "cursor": "pointer"
+    }
+  },
+  "animations": {}
 }

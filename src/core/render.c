@@ -28,6 +28,10 @@ WidgetStyle widgetstyle_default(void) {
     s.accent_color = rgba(0xe9, 0x45, 0x60, 255);
     s.border_width = 1;
     s.border_radius = 4;
+    s.border_top_style = BORDER_SOLID;
+    s.border_bottom_style = BORDER_SOLID;
+    s.border_left_style = BORDER_SOLID;
+    s.border_right_style = BORDER_SOLID;
     s.padding[0] = 8; s.padding[1] = 12; s.padding[2] = 8; s.padding[3] = 12;
     s.font_size = 14;
     s.font_weight = 400;
@@ -38,6 +42,14 @@ WidgetStyle widgetstyle_default(void) {
     s.rotation = 0.0f;
     s.translate_x = 0.0f;
     s.translate_y = 0.0f;
+    s.shadow_count = 0;
+    s.gradient.type = GRADIENT_NONE;
+    s.backdrop_blur = 0;
+    s.letter_spacing = 0.0f;
+    s.line_height = 1.2f;
+    s.text_transform = 0;
+    s.transition_ms = 150;
+    s.cursor_style = CURSOR_DEFAULT;
     return s;
 }
 
@@ -79,6 +91,14 @@ void resolve_node_styles(RenderTree *node, Theme *theme) {
         if (node->u.split_panes.second) resolve_node_styles(node->u.split_panes.second, theme);
         if (node->u.split_panes.third) resolve_node_styles(node->u.split_panes.third, theme);
     }
+    if (node->type == RNODE_FLEX && node->u.flex.children) {
+        for (int i = 0; i < node->u.flex.child_count; i++)
+            resolve_node_styles(&node->u.flex.children[i], theme);
+    }
+    if (node->type == RNODE_GRID && node->u.grid.children) {
+        for (int i = 0; i < node->u.grid.child_count; i++)
+            resolve_node_styles(&node->u.grid.children[i], theme);
+    }
 }
 
 void render_tree_mark_dirty(RenderTree *tree) {
@@ -87,6 +107,14 @@ void render_tree_mark_dirty(RenderTree *tree) {
     if (tree->type == RNODE_CONTAINER) {
         for (int i = 0; i < tree->u.container.child_count; i++)
             render_tree_mark_dirty(&tree->u.container.children[i]);
+    }
+    if (tree->type == RNODE_FLEX && tree->u.flex.children) {
+        for (int i = 0; i < tree->u.flex.child_count; i++)
+            render_tree_mark_dirty(&tree->u.flex.children[i]);
+    }
+    if (tree->type == RNODE_GRID && tree->u.grid.children) {
+        for (int i = 0; i < tree->u.grid.child_count; i++)
+            render_tree_mark_dirty(&tree->u.grid.children[i]);
     }
 }
 

@@ -9,8 +9,12 @@ extern Arena *g_session_arena;
 
 static void tabs_render(Widget *self, RenderTree *out) {
     TabsData *d = (TabsData *)(self + 1);
+    WidgetBase *base = (WidgetBase *)(self + 1);
     memset(out, 0, sizeof(*out));
     out->type = RNODE_TABS;
+    out->accessible.role = "tabs";
+    out->accessible.label = d->title ? d->title : "Tabs";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     out->u.tabs.tab_labels = arena_alloc(g_session_arena, d->tab_count * sizeof(char *));
     out->u.tabs.tab_count = d->tab_count;
     for (int i = 0; i < d->tab_count; i++)
@@ -46,6 +50,7 @@ static void tabs_destroy(Widget *self) {
 Widget *tabs_widget_new(const char *title, char **tab_labels, int tab_count, Widget **children, int child_count) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(TabsData));
     TabsData data = { .title = strdup(title), .tab_count = tab_count, .active = 0, .child_count = child_count };
+    data.base.tab_index = -1;
     data.tab_labels = malloc(tab_count * sizeof(char *));
     for (int i = 0; i < tab_count; i++) data.tab_labels[i] = strdup(tab_labels[i]);
     data.children = malloc(child_count * sizeof(Widget *));

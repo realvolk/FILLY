@@ -13,6 +13,9 @@ static void gauge_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "gauge";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     int box_w = 50, box_h = 6;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -58,6 +61,7 @@ Widget *gauge_widget_new(const char *title, int percent, const char *label) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(GaugeData));
     GaugeData *d = (GaugeData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     d->percent = percent;
     d->label = strdup(label);

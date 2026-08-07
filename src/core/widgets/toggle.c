@@ -13,6 +13,9 @@ static void toggle_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "toggle";
+    out->accessible.label = d->title ? d->title : d->label;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 40, box_h = 5;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -67,6 +70,7 @@ Widget *toggle_widget_new(const char *title, const char *label, bool default_val
     Widget *w = calloc(1, sizeof(Widget) + sizeof(ToggleData));
     ToggleData *d = (ToggleData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : NULL;
     d->label = strdup(label);
     d->value = default_val;

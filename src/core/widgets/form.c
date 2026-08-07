@@ -12,6 +12,9 @@ static void form_render(Widget *self, RenderTree *out) {
     WidgetBase *base = (WidgetBase *)(self + 1);
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out)); out->style_class = "container";
+    out->accessible.role = "form";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 60, box_h = 4 + d->field_count * 2 + 2; if (box_w > area.w - 2) box_w = area.w - 2; if (box_h > area.h - 2) box_h = area.h - 2;
     RenderTree *children = arena_alloc(g_session_arena, 3 * sizeof(RenderTree));
     children[0].type = RNODE_TEXT; children[0].rect = rect_new(1, 0, box_w - 2, 1);
@@ -72,6 +75,7 @@ static void form_destroy(Widget *self) { FormData *d = (FormData *)(self + 1); f
 Widget *form_widget_new(const char *title, FormField *fields, int field_count, const char *submit_label) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(FormData));
     FormData data = { .title = strdup(title), .field_count = field_count, .focused = 0, .submit_label = strdup(submit_label) };
+    data.base.tab_index = -1;
     data.fields = malloc(field_count * sizeof(FormField));
     for (int i=0;i<field_count;i++){ data.fields[i].label=strdup(fields[i].label); data.fields[i].widget_type=strdup(fields[i].widget_type); data.fields[i].value=strdup(fields[i].value); data.fields[i].placeholder=strdup(fields[i].placeholder); data.fields[i].choices=fields[i].choices?malloc(fields[i].choice_count*sizeof(char*)):NULL; data.fields[i].choice_count=fields[i].choice_count; for(int j=0;j<fields[i].choice_count;j++) data.fields[i].choices[j]=strdup(fields[i].choices[j]); }
     widget_base_init(w, &data, sizeof(FormData), form_render, form_handle_event, form_destroy);

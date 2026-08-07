@@ -35,6 +35,11 @@
 #include "core/widgets/terminal_emulator.h"
 #include "core/widgets/widget_builder.h"
 #include "core/widgets/macro_recorder.h"
+#include "core/widgets/image.h"
+#include "core/widgets/canvas.h"
+#include "core/widgets/markdown.h"
+#include "core/widgets/plot.h"
+#include "core/widgets/video.h"
 #include "cJSON.h"
 #include <stdlib.h>
 #include <string.h>
@@ -229,6 +234,21 @@ static const ParamDesc *widget_builder_params = NULL;
 static Widget *macro_recorder_ctor(void **a) { (void)a; return macro_recorder_widget_new(); }
 static const ParamDesc *macro_recorder_params = NULL;
 
+static Widget *image_ctor(void **a) { return image_widget_new((char *)a[0], (char *)a[1], (int)(intptr_t)a[2], (int)(intptr_t)a[3]); }
+static const ParamDesc image_params[] = {{"source",P_STR,"",0},{"fit",P_STR,"contain",0},{"width",P_INT,NULL,0},{"height",P_INT,NULL,0}};
+
+static Widget *canvas_ctor(void **a) { return canvas_widget_new((char *)a[0], (int)(intptr_t)a[1], (int)(intptr_t)a[2]); }
+static const ParamDesc canvas_params[] = {{"script",P_STR,"",0},{"width",P_INT,NULL,0},{"height",P_INT,NULL,0}};
+
+static Widget *markdown_ctor(void **a) { return markdown_widget_new((char *)a[0]); }
+static const ParamDesc markdown_params[] = {{"content",P_STR,"",0}};
+
+static Widget *plot_ctor(void **a) { return plot_widget_new((char *)a[0], (double *)a[1], (int)(intptr_t)a[2], (char **)a[3], (int)(intptr_t)a[4]); }
+static const ParamDesc plot_params[] = {{"type",P_STR,"line",0},{"data",P_JSON,NULL,0},{"data_count",P_INT,NULL,0},{"labels",P_STRS,NULL,0},{"label_count",P_INT,NULL,0}};
+
+static Widget *video_ctor(void **a) { return video_widget_new((char *)a[0], (int)(intptr_t)a[1]); }
+static const ParamDesc video_params[] = {{"source",P_STR,"",0},{"loop",P_BOOL,NULL,0}};
+
 #define DEF_FACTORY(name, ctor, params, count) static Widget *name##_factory(const WidgetRequest *req) { return generic_factory(req, (RawCtor)ctor, params, count); }
 DEF_FACTORY(menu,menu_ctor,menu_params,5)
 DEF_FACTORY(yesno,yesno_ctor,yesno_params,3)
@@ -265,6 +285,11 @@ DEF_FACTORY(hub,hub_ctor,hub_params,3)
 DEF_FACTORY(terminal_emulator,terminal_emulator_ctor,terminal_emulator_params,3)
 DEF_FACTORY(widget_builder,widget_builder_ctor,widget_builder_params,0)
 DEF_FACTORY(macro_recorder,macro_recorder_ctor,macro_recorder_params,0)
+DEF_FACTORY(image,image_ctor,image_params,4)
+DEF_FACTORY(canvas,canvas_ctor,canvas_params,3)
+DEF_FACTORY(markdown,markdown_ctor,markdown_params,1)
+DEF_FACTORY(plot,plot_ctor,plot_params,5)
+DEF_FACTORY(video,video_ctor,video_params,2)
 
 void register_builtin_widgets(void) {
     widget_registry_register("menu",menu_factory);
@@ -303,6 +328,11 @@ void register_builtin_widgets(void) {
     widget_registry_register("terminal_emulator",terminal_emulator_factory);
     widget_registry_register("widget_builder",widget_builder_factory);
     widget_registry_register("macro_recorder",macro_recorder_factory);
+    widget_registry_register("image",image_factory);
+    widget_registry_register("canvas",canvas_factory);
+    widget_registry_register("markdown",markdown_factory);
+    widget_registry_register("plot",plot_factory);
+    widget_registry_register("video",video_factory);
 }
 
 const ParamDesc *widget_get_params(const char *widget_type, int *count) {
@@ -341,6 +371,11 @@ const ParamDesc *widget_get_params(const char *widget_type, int *count) {
     if (strcmp(widget_type, "terminal_emulator") == 0) { *count = 3; return terminal_emulator_params; }
     if (strcmp(widget_type, "widget_builder") == 0) { *count = 0; return widget_builder_params; }
     if (strcmp(widget_type, "macro_recorder") == 0) { *count = 0; return macro_recorder_params; }
+    if (strcmp(widget_type, "image") == 0) { *count = 4; return image_params; }
+    if (strcmp(widget_type, "canvas") == 0) { *count = 3; return canvas_params; }
+    if (strcmp(widget_type, "markdown") == 0) { *count = 1; return markdown_params; }
+    if (strcmp(widget_type, "plot") == 0) { *count = 5; return plot_params; }
+    if (strcmp(widget_type, "video") == 0) { *count = 2; return video_params; }
     *count = 0;
     return NULL;
 }

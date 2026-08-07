@@ -14,6 +14,9 @@ static void checklist_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "checklist";
+    out->accessible.label = d->title ? d->title : "Checklist";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int is_gui = (area.w > 200);
     int ch = is_gui ? 30 : 1;
     int box_w = is_gui ? (int)(area.w * 0.5f) : (int)(area.w * 0.7f);
@@ -126,6 +129,7 @@ Widget *checklist_widget_new(const char *title, const char *message, char **choi
     Widget *w = calloc(1, sizeof(Widget) + sizeof(ChecklistData));
     ChecklistData *d = (ChecklistData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : NULL;
     d->message = message ? strdup(message) : NULL;
     d->choices = malloc(count * sizeof(char *));

@@ -17,7 +17,8 @@
     "border_color": "$border",
     "border_radius": "$radius",
     "border_width": 1,
-    "padding": [8, 14, 8, 14]
+    "padding": [8, 14, 8, 14],
+    "transition_ms": 150
   },
   "widgets": {
     "text": {
@@ -33,6 +34,131 @@
     "list item:selected": {
       "bg_color": "$accent",
       "fg_color": "$bg"
+    },
+    "container": {
+      "shadow": [
+        {"offset_x": 0, "offset_y": 2, "blur": 8, "spread": 0, "color": "#00000060"}
+      ]
+    },
+    "container:hover": {
+      "shadow": [
+        {"offset_x": 0, "offset_y": 4, "blur": 12, "spread": 0, "color": "#00000080"}
+      ]
+    },
+    "input": {
+      "border_radius": "$radius",
+      "cursor": "text"
+    },
+    "input:focused": {
+      "border_color": "$accent",
+      "shadow": [
+        {"offset_x": 0, "offset_y": 0, "blur": 0, "spread": 2, "color": "$accent"}
+      ]
+    },
+    "badge": {
+      "shadow": [
+        {"offset_x": 0, "offset_y": 2, "blur": 4, "spread": 0, "color": "#00000040"}
+      ]
+    },
+    "button": {
+      "cursor": "pointer",
+      "shadow": [
+        {"offset_x": 0, "offset_y": 2, "blur": 4, "spread": 0, "color": "#00000040"}
+      ]
+    },
+    "button:hover": {
+      "shadow": [
+        {"offset_x": 0, "offset_y": 4, "blur": 8, "spread": 0, "color": "#00000060"}
+      ]
+    },
+    "toggle": {
+      "cursor": "pointer"
+    },
+    "checkbox": {
+      "cursor": "pointer"
+    }
+  },
+  "animations": {
+    "fade-in": {
+      "duration": 200,
+      "tui": "fade",
+      "keyframes": [
+        {"time": 0, "opacity": 0.0},
+        {"time": 200, "opacity": 1.0}
+      ]
+    },
+    "slide-up": {
+      "duration": 300,
+      "easing": "ease-out-cubic",
+      "tui": "slide-in",
+      "keyframes": [
+        {"time": 0, "y": 20, "opacity": 0.0},
+        {"time": 300, "y": 0, "opacity": 1.0}
+      ]
+    },
+    "slide-down": {
+      "duration": 300,
+      "easing": "ease-out-cubic",
+      "tui": "slide-in",
+      "keyframes": [
+        {"time": 0, "y": -20, "opacity": 0.0},
+        {"time": 300, "y": 0, "opacity": 1.0}
+      ]
+    },
+    "scale-in": {
+      "duration": 250,
+      "easing": "ease-out-cubic",
+      "keyframes": [
+        {"time": 0, "scale_x": 0.9, "scale_y": 0.9, "opacity": 0.0},
+        {"time": 250, "scale_x": 1.0, "scale_y": 1.0, "opacity": 1.0}
+      ]
+    },
+    "pulse": {
+      "duration": 1000,
+      "loop": true,
+      "auto_reverse": true,
+      "tui": "fade",
+      "keyframes": [
+        {"time": 0, "opacity": 1.0},
+        {"time": 500, "opacity": 0.6},
+        {"time": 1000, "opacity": 1.0}
+      ]
+    },
+    "bounce-in": {
+      "duration": 500,
+      "easing": "bounce",
+      "keyframes": [
+        {"time": 0, "scale_x": 0.3, "scale_y": 0.3, "opacity": 0.0},
+        {"time": 500, "scale_x": 1.0, "scale_y": 1.0, "opacity": 1.0}
+      ]
+    },
+    "shake": {
+      "duration": 400,
+      "keyframes": [
+        {"time": 0, "x": 0},
+        {"time": 100, "x": -10},
+        {"time": 200, "x": 10},
+        {"time": 300, "x": -10},
+        {"time": 400, "x": 0}
+      ]
+    },
+    "glow": {
+      "duration": 1500,
+      "loop": true,
+      "auto_reverse": true,
+      "keyframes": [
+        {"time": 0, "shadow_color": "#2aa19820"},
+        {"time": 750, "shadow_color": "#2aa19860"},
+        {"time": 1500, "shadow_color": "#2aa19820"}
+      ]
+    },
+    "typewriter": {
+      "duration": 2000,
+      "tui": "typewriter",
+      "keyframes": [
+        {"time": 0},
+        {"time": 2000}
+      ]
     }
   }
 }

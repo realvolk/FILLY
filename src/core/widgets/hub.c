@@ -107,6 +107,9 @@ static void hub_render(Widget *self, RenderTree *out) {
     }
 
     out->style_class = "container";
+    out->accessible.role = "hub";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = (int)(area.w * 0.95f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.95f);
@@ -380,6 +383,7 @@ static void hub_destroy(Widget *self) {
 Widget *hub_widget_new(const char *title, cJSON *categories_json, cJSON *actions_json) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(HubData));
     HubData data = { .title = strdup(title), .cat_idx = 0, .item_idx = 0, .mode = HUB_BROWSING, .sub_widget = NULL };
+    data.base.tab_index = -1;
     data.cat_count = 0;
     data.categories = NULL;
 

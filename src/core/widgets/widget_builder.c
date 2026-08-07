@@ -107,6 +107,9 @@ static void builder_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "widget-builder";
+    out->accessible.label = "Widget Builder";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = area.w - 2;
     int box_h = area.h - 2;
     if (box_w < 40) box_w = 40;
@@ -461,6 +464,7 @@ Widget *widget_builder_new(void) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(WidgetBuilderData));
     WidgetBuilderData *d = (WidgetBuilderData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->items = NULL;
     d->item_count = 0;
     d->selected_item = -1;

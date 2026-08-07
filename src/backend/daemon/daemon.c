@@ -16,6 +16,7 @@ extern BackendVTable terminal_vtable;
 #include "core/session.h"
 #include "core/widget.h"
 #include "backend/headless/headless.h"
+#include "core/accessibility.h"
 #include "script/fil.h"
 #include "core/clipboard.h"
 #include "core/log.h"
@@ -59,6 +60,9 @@ static int daemon_socket_fd = -1;
 static int shm_fd = -1;
 static void *shm_addr = NULL;
 static bool use_msgpack = false;
+static bool session_use_streaming = false;
+static pthread_rwlock_t session_lock = PTHREAD_RWLOCK_INITIALIZER;
+static pthread_rwlock_t theme_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 typedef enum {
     PROFILE_SSH,
@@ -134,9 +138,26 @@ static bool sock_draw(void *self, RenderTree *tree) {
     char buf[524288];
     render_tree_to_buf(tree, 0, 0, s->term_w, s->term_h, buf, sizeof(buf));
     int len = strlen(buf);
-    char header[128];
-    int hl = snprintf(header, sizeof(header), "{\"type\":\"draw\",\"len\":%d}\n", len);
-    write(s->fd, header, hl);
+    
+    if (session_use_streaming) {
+        static int frame_id = 0;
+        frame_id++;
+        char header[256];
+        int hl = snprintf(header, sizeof(header), 
+            "{\"type\":\"stream_start\",\"frame_id\":%d}\n", frame_id);
+        write(s->fd, header, hl);
+        hl = snprintf(header, sizeof(header),
+            "{\"type\":\"stream_frame\",\"nodes\":[{\"id\":\"root\",\"rect\":{\"x\":0,\"y\":0,\"w\":%d,\"h\":%d},\"dirty\":true}]}\n",
+            s->term_w, s->term_h);
+        write(s->fd, header, hl);
+        hl = snprintf(header, sizeof(header),
+            "{\"type\":\"stream_end\",\"frame_id\":%d}\n", frame_id);
+        write(s->fd, header, hl);
+    }
+    
+    char draw_header[128];
+    int dhl = snprintf(draw_header, sizeof(draw_header), "{\"type\":\"draw\",\"len\":%d}\n", len);
+    write(s->fd, draw_header, dhl);
     write(s->fd, buf, len);
     write(s->fd, "\n", 1);
     return true;
@@ -301,10 +322,17 @@ static Session *session_find(const char *id) {
 }
 
 static Session *session_create(void) {
+    pthread_rwlock_wrlock(&session_lock);
     sessions = realloc(sessions, (session_count+1)*sizeof(Session));
     Session *s = &sessions[session_count++];
     snprintf(s->id, sizeof(s->id), "%lx%lx", (unsigned long)time(NULL), (unsigned long)pthread_self());
     s->store = store_new(); s->active = true;
+    s->widget_position_x = -1;
+    s->widget_position_y = -1;
+    s->widget_anchor[0] = '\0';
+    s->widget_relative_to[0] = '\0';
+    s->widget_z_index = 0;
+    pthread_rwlock_unlock(&session_lock);
     return s;
 }
 
@@ -329,6 +357,76 @@ static char *read_message(int fd, time_t *last_activity) {
 
 static const char *widget_schema =
     "{\"type\":\"object\",\"properties\":{\"widget\":{\"type\":\"string\"},\"params\":{\"type\":\"object\"}}}";
+
+static void send_negotiated_capabilities(int fd, cJSON *client_caps) {
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "type", "handshake_ack");
+    cJSON_AddNumberToObject(resp, "version", 2);
+    cJSON *neg = cJSON_CreateArray();
+    if (client_caps && cJSON_IsArray(client_caps)) {
+        cJSON *cap;
+        cJSON_ArrayForEach(cap, client_caps) {
+            if (cap->valuestring) {
+                const char *c = cap->valuestring;
+                if (!strcmp(c, "animations") || !strcmp(c, "vectors") ||
+                    !strcmp(c, "shadows") || !strcmp(c, "streaming") ||
+                    !strcmp(c, "positioning") || !strcmp(c, "flexbox") ||
+                    !strcmp(c, "grid") || !strcmp(c, "shaping") ||
+                    !strcmp(c, "transforms") || !strcmp(c, "accessibility")) {
+                    cJSON_AddItemToArray(neg, cJSON_CreateString(c));
+                }
+            }
+        }
+    }
+    cJSON_AddItemToObject(resp, "capabilities", neg);
+    char *out = cJSON_PrintUnformatted(resp);
+    write(fd, out, strlen(out));
+    write(fd, "\n", 1);
+    free(out);
+    cJSON_Delete(resp);
+}
+
+static void handle_query(int fd, cJSON *json, Session *session) {
+    cJSON *widget_id = cJSON_GetObjectItem(json, "widget_id");
+    if (!widget_id || !widget_id->valuestring) {
+        send_error(fd, "Missing widget_id");
+        return;
+    }
+    const char *val = store_get(session->store, widget_id->valuestring);
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "type", "query_response");
+    cJSON_AddStringToObject(resp, "widget_id", widget_id->valuestring);
+    if (val) cJSON_AddStringToObject(resp, "value", val);
+    else cJSON_AddNullToObject(resp, "value");
+    char *out = cJSON_PrintUnformatted(resp);
+    send_response_msgpack(fd, out);
+    free(out);
+    cJSON_Delete(resp);
+}
+
+static void handle_position(int fd, cJSON *json, Session *session) {
+    cJSON *widget_id = cJSON_GetObjectItem(json, "widget_id");
+    cJSON *anchor = cJSON_GetObjectItem(json, "anchor");
+    cJSON *x = cJSON_GetObjectItem(json, "x");
+    cJSON *y = cJSON_GetObjectItem(json, "y");
+    cJSON *dx = cJSON_GetObjectItem(json, "dx");
+    cJSON *dy = cJSON_GetObjectItem(json, "dy");
+    cJSON *relative_to = cJSON_GetObjectItem(json, "relative_to");
+    cJSON *z = cJSON_GetObjectItem(json, "z_index");
+    cJSON *overflow = cJSON_GetObjectItem(json, "overflow");
+
+    if (x && x->type == cJSON_Number) session->widget_position_x = x->valueint;
+    if (y && y->type == cJSON_Number) session->widget_position_y = y->valueint;
+    if (anchor && anchor->valuestring) {
+        strncpy(session->widget_anchor, anchor->valuestring, sizeof(session->widget_anchor) - 1);
+    }
+    if (relative_to && relative_to->valuestring) {
+        strncpy(session->widget_relative_to, relative_to->valuestring, sizeof(session->widget_relative_to) - 1);
+    }
+    if (z && z->type == cJSON_Number) session->widget_z_index = z->valueint;
+    (void)widget_id; (void)dx; (void)dy; (void)overflow;
+    send_ok(fd);
+}
 
 static void dispatch_message(int fd, const char *msg, Session *session, Backend *backend, bool *running) {
     char *schema_error = NULL;
@@ -355,20 +453,26 @@ static void dispatch_message(int fd, const char *msg, Session *session, Backend 
             }
             send_ok(fd); cJSON_Delete(json); return;
         }
+        if (!strcmp(type->valuestring, "query")) { handle_query(fd, json, session); cJSON_Delete(json); return; }
+        if (!strcmp(type->valuestring, "position")) { handle_position(fd, json, session); cJSON_Delete(json); return; }
         if (!strcmp(type->valuestring, "reload_theme")) {
+            pthread_rwlock_wrlock(&theme_lock);
             if (g_active_theme) theme_free(g_active_theme);
             g_active_theme = theme_load("themes/forge.json");
             if (!g_active_theme) g_active_theme = theme_load_directory("themes");
             if (!g_active_theme) g_active_theme = theme_default();
             theme_merge_user_override(g_active_theme);
             if (plugin_dir_path) theme_add_plugin_overrides(g_active_theme, plugin_dir_path);
+            pthread_rwlock_unlock(&theme_lock);
             send_ok(fd); cJSON_Delete(json); return;
         }
         if (!strcmp(type->valuestring, "reload_plugins")) { reload_plugins(); send_ok(fd); cJSON_Delete(json); return; }
         if (!strcmp(type->valuestring, "set_accessibility")) {
             cJSON *profile = cJSON_GetObjectItem(json, "profile");
+            pthread_rwlock_wrlock(&theme_lock);
             if (profile && profile->valuestring && g_active_theme)
                 theme_merge_accessibility_profile(g_active_theme, profile->valuestring);
+            pthread_rwlock_unlock(&theme_lock);
             send_ok(fd); cJSON_Delete(json); return;
         }
         if (!strcmp(type->valuestring, "session")) {
@@ -385,6 +489,13 @@ static void dispatch_message(int fd, const char *msg, Session *session, Backend 
     WidgetRequest *req = widget_request_parse(msg);
     cJSON_Delete(json);
     if (!req) { send_error(fd, "Invalid JSON"); return; }
+
+    if (session->widget_position_x >= 0) { req->x = session->widget_position_x; session->widget_position_x = -1; }
+    if (session->widget_position_y >= 0) { req->y = session->widget_position_y; session->widget_position_y = -1; }
+    if (session->widget_anchor[0]) { req->anchor = strdup(session->widget_anchor); session->widget_anchor[0] = '\0'; }
+    if (session->widget_relative_to[0]) { req->relative_to = strdup(session->widget_relative_to); session->widget_relative_to[0] = '\0'; }
+    if (session->widget_z_index != 0) { req->z_index = session->widget_z_index; session->widget_z_index = 0; }
+
     Widget *w = widget_registry_create(req);
     WidgetResponse resp;
     if (w) { resp = session_run(w, backend); widget_destroy(w); }
@@ -408,6 +519,7 @@ static void *handle_gui_client(void *arg) {
         backends[nb++] = &(Backend){ .vtable = &terminal_vtable, .data = t };
 
     Session *session = session_create();
+    g_active_store = session->store;
     for (int i = 0; i < nb; i++) backends[i]->vtable->setup(backends[i]->data);
 
     time_t last_activity = time(NULL);
@@ -437,6 +549,8 @@ static void *handle_client(void *arg) {
     bool gui_req = false;
     bool is_handshake = false;
     use_msgpack = false;
+    session_use_streaming = false;
+    cJSON *client_caps = NULL;
     if (first) {
         cJSON *gui = cJSON_GetObjectItem(first, "gui");
         if (gui) gui_req = gui->valueint;
@@ -446,6 +560,15 @@ static void *handle_client(void *arg) {
             cJSON *enc = cJSON_GetObjectItem(first, "encoding");
             if (enc && enc->valuestring && !strcmp(enc->valuestring, "msgpack"))
                 use_msgpack = true;
+            client_caps = cJSON_GetObjectItem(first, "capabilities");
+            if (client_caps) {
+                send_negotiated_capabilities(fd, client_caps);
+                cJSON *cap;
+                cJSON_ArrayForEach(cap, client_caps) {
+                    if (cap->valuestring && strcmp(cap->valuestring, "streaming") == 0)
+                        session_use_streaming = true;
+                }
+            }
         }
         cJSON_Delete(first);
     }
@@ -470,10 +593,10 @@ static void *handle_client(void *arg) {
 
     cJSON *type_check = cJSON_GetObjectItem(json, "type");
     cJSON *widget_check = cJSON_GetObjectItem(json, "widget");
-    
+
     if (type_check && type_check->valuestring && !widget_check) {
-        /* Non-widget control message (reload_theme, ping, subscribe, etc.) */
         Session *session = session_create();
+        g_active_store = session->store;
         bool running = true;
         HeadlessBackend hl;
         headless_backend_init(&hl, 80, 24);
@@ -490,8 +613,13 @@ static void *handle_client(void *arg) {
     if (!req) { cJSON_Delete(json); free(widget_msg); send_error(fd, "Invalid widget request"); close(fd); return NULL; }
 
     Session *session = session_create();
-    if (req->session_id) { Session *s = session_find(req->session_id); if (s) session = s; }
-    (void)session;
+    if (req->session_id) {
+        pthread_rwlock_rdlock(&session_lock);
+        Session *s = session_find(req->session_id);
+        if (s) session = s;
+        pthread_rwlock_unlock(&session_lock);
+    }
+    g_active_store = session->store;
 
     HeadlessBackend hl;
     SocketBackend sb = { .fd = fd, .tty_fd = -1, .term_w = 80, .term_h = 24 };
@@ -532,16 +660,19 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
     FillyConfig cfg; config_load(&cfg, NULL);
     log_init(cfg.log_path[0] ? cfg.log_path : NULL, cfg.log_level);
     i18n_init();
+    accessibility_init();
     if (cfg.sandbox) set_use_sandbox(true);
 
     DeviceProfile profile = detect_device_profile();
     LOG_INFO("daemon: device profile %d", profile);
 
+    pthread_rwlock_wrlock(&theme_lock);
     g_active_theme = theme_load("themes/forge.json");
     if (!g_active_theme) g_active_theme = theme_load_directory("themes");
     if (!g_active_theme) g_active_theme = theme_default();
     if (theme_path) theme_merge_app_override(g_active_theme, theme_path);
     theme_merge_user_override(g_active_theme);
+    pthread_rwlock_unlock(&theme_lock);
 
     if (profile == PROFILE_SSH && g_active_theme) {
         theme_merge_accessibility_profile(g_active_theme, "high-contrast");
@@ -553,7 +684,12 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
     session_set_clipboard(&ci);
     Session *restored = NULL;
     int restored_count = checkpoint_restore(&restored);
-    if (restored_count > 0) { sessions = restored; session_count = restored_count; }
+    if (restored_count > 0) {
+        pthread_rwlock_wrlock(&session_lock);
+        sessions = restored;
+        session_count = restored_count;
+        pthread_rwlock_unlock(&session_lock);
+    }
 
     shm_fd = shm_ipc_create();
     if (shm_fd >= 0) { shm_addr = shm_ipc_map(shm_fd); }
@@ -652,6 +788,7 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
         if (inotify_fd >= 0) {
             struct inotify_event iev;
             if (read(inotify_fd, &iev, sizeof(iev)) > 0) {
+                pthread_rwlock_wrlock(&theme_lock);
                 if (g_active_theme) theme_free(g_active_theme);
                 g_active_theme = theme_load("themes/forge.json");
                 if (!g_active_theme) g_active_theme = theme_load_directory("themes");
@@ -659,6 +796,7 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
                 if (theme_path) theme_merge_app_override(g_active_theme, theme_path);
                 theme_merge_user_override(g_active_theme);
                 if (plugin_dir_path) theme_add_plugin_overrides(g_active_theme, plugin_dir_path);
+                pthread_rwlock_unlock(&theme_lock);
             }
         }
 #elif FILLY_KQUEUE
@@ -666,6 +804,7 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
             struct kevent kev;
             struct timespec kts = {0, 0};
             if (kevent(kq, NULL, 0, &kev, 1, &kts) > 0) {
+                pthread_rwlock_wrlock(&theme_lock);
                 if (g_active_theme) theme_free(g_active_theme);
                 g_active_theme = theme_load("themes/forge.json");
                 if (!g_active_theme) g_active_theme = theme_load_directory("themes");
@@ -673,6 +812,7 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
                 if (theme_path) theme_merge_app_override(g_active_theme, theme_path);
                 theme_merge_user_override(g_active_theme);
                 if (plugin_dir_path) theme_add_plugin_overrides(g_active_theme, plugin_dir_path);
+                pthread_rwlock_unlock(&theme_lock);
             }
         }
 #endif
@@ -685,10 +825,16 @@ bool daemon_run(const char *socket_path, const char *theme_path) {
         pthread_create(&tid, NULL, handle_client, (void*)(intptr_t)client);
         pthread_detach(tid);
         static int conn_count = 0;
-        if (++conn_count % 10 == 0) checkpoint_save(sessions, session_count);
+        if (++conn_count % 10 == 0) {
+            pthread_rwlock_rdlock(&session_lock);
+            checkpoint_save(sessions, session_count);
+            pthread_rwlock_unlock(&session_lock);
+        }
     }
 
+    pthread_rwlock_rdlock(&session_lock);
     checkpoint_save(sessions, session_count);
+    pthread_rwlock_unlock(&session_lock);
     close(daemon_socket_fd);
     unlink(actual_path);
     if (shm_addr) shm_ipc_unmap(shm_addr);

@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sys/time.h>
+#include "core/animation.h"
 
 TextStyle textstyle_normal(void) {
     TextStyle s = { .fg = "7", .bg = NULL, .bold = true, .italic = false, .underline = false };
@@ -49,6 +51,23 @@ static void set_style(char *buf, int buf_sz, WidgetStyle *ws) {
     buf_printf(buf, buf_sz, "m");
 }
 
+static void set_dim_style(char *buf, int buf_sz, WidgetStyle *ws, float amount) {
+    if (!ws || ws->fg_color == 0) { buf_printf(buf, buf_sz, "\033[0m"); return; }
+    uint8_t r = (uint8_t)(((ws->fg_color >> 16) & 0xFF) * amount);
+    uint8_t g = (uint8_t)(((ws->fg_color >> 8) & 0xFF) * amount);
+    uint8_t b = (uint8_t)((ws->fg_color & 0xFF) * amount);
+    buf_printf(buf, buf_sz, "\033[0");
+    if (ws->font_weight >= 700) buf_printf(buf, buf_sz, ";1");
+    buf_printf(buf, buf_sz, ";38;2;%d;%d;%d", r, g, b);
+    if (ws->bg_color != 0) {
+        r = (uint8_t)(((ws->bg_color >> 16) & 0xFF) * amount);
+        g = (uint8_t)(((ws->bg_color >> 8) & 0xFF) * amount);
+        b = (uint8_t)((ws->bg_color & 0xFF) * amount);
+        buf_printf(buf, buf_sz, ";48;2;%d;%d;%d", r, g, b);
+    }
+    buf_printf(buf, buf_sz, "m");
+}
+
 static int min(int a, int b) { return a < b ? a : b; }
 
 static void draw_box(char *buf, int buf_sz, int x, int y, int w, int h,
@@ -59,6 +78,8 @@ static void draw_box(char *buf, int buf_sz, int x, int y, int w, int h,
         case BORDER_SINGLE: tl="┌"; tr="┐"; bl="└"; br="┘"; h_line="─"; v_line="│"; break;
         case BORDER_DOUBLE: tl="╔"; tr="╗"; bl="╚"; br="╝"; h_line="═"; v_line="║"; break;
         case BORDER_ROUNDED: tl="╭"; tr="╮"; bl="╰"; br="╯"; h_line="─"; v_line="│"; break;
+        case BORDER_DASHED: tl="┌"; tr="┐"; bl="└"; br="┘"; h_line="╌"; v_line="╎"; break;
+        case BORDER_DOTTED: tl="┌"; tr="┐"; bl="└"; br="┘"; h_line="┈"; v_line="┊"; break;
         default: return;
     }
     set_style(buf, buf_sz, ws);
@@ -84,15 +105,17 @@ static void fill_rect(char *buf, int buf_sz, int x, int y, int w, int h) {
 }
 
 static void draw_text_wrapped(char *buf, int buf_sz, int x, int y, int w, int h,
-                              const char *text, WidgetStyle *ws) {
+                              const char *text, WidgetStyle *ws, int visible_chars) {
     if (!text || w <= 0 || h <= 0) return;
+    if (visible_chars == 0) return;
     set_style(buf, buf_sz, ws);
     int line = 0;
     const char *p = text;
-    while (*p && line < h) {
+    int chars_left = (visible_chars < 0) ? 999999 : visible_chars;
+    while (*p && line < h && chars_left > 0) {
         const char *end = p;
         int col = 0;
-        while (*end && *end != '\n' && col < w) { end++; col++; }
+        while (*end && *end != '\n' && col < w && col < chars_left) { end++; col++; }
         if (col == w && *end && *end != '\n') {
             const char *space = end;
             while (space > p && *space != ' ') space--;
@@ -107,6 +130,7 @@ static void draw_text_wrapped(char *buf, int buf_sz, int x, int y, int w, int h,
         for (const char *c = p; c < end; c++) buf_printf(buf, buf_sz, "%c", *c);
         for (int i = pad + col; i < w; i++) buf_printf(buf, buf_sz, " ");
         line++;
+        chars_left -= col;
         p = (*end == '\n') ? end + 1 : end;
     }
     for (; line < h; line++) {
@@ -205,16 +229,85 @@ static void flatten2(TreeNode *n, int c, int d, Flat *flat, int *vis) {
     }
 }
 
+static bool has_tui_animation(RenderTree *node) {
+    if (!node) return false;
+    for (int i = 0; i < node->animation_count; i++) {
+        if (node->active_animations[i].playing && !node->active_animations[i].paused &&
+            node->active_animations[i].def && node->active_animations[i].def->tui_type != TUI_ANIM_NONE)
+            return true;
+    }
+    return false;
+}
+
+static int get_slide_offset_x(RenderTree *node, long long now_ms) {
+    for (int i = 0; i < node->animation_count; i++) {
+        struct AnimInstance *inst = &node->active_animations[i];
+        if (!inst->playing || inst->paused || !inst->def || inst->def->tui_type != TUI_ANIM_SLIDE_IN)
+            continue;
+        float progress = (float)(now_ms - inst->start_time) / inst->def->duration_ms;
+        if (progress < 0.0f) progress = 0.0f;
+        if (progress > 1.0f) progress = 1.0f;
+        float eased = easing_apply(EASE_OUT, progress);
+        return (int)(inst->slide_origin_x * (1.0f - eased));
+    }
+    return 0;
+}
+
+static int get_slide_offset_y(RenderTree *node, long long now_ms) {
+    for (int i = 0; i < node->animation_count; i++) {
+        struct AnimInstance *inst = &node->active_animations[i];
+        if (!inst->playing || inst->paused || !inst->def || inst->def->tui_type != TUI_ANIM_SLIDE_IN)
+            continue;
+        float progress = (float)(now_ms - inst->start_time) / inst->def->duration_ms;
+        if (progress < 0.0f) progress = 0.0f;
+        if (progress > 1.0f) progress = 1.0f;
+        float eased = easing_apply(EASE_OUT, progress);
+        return (int)(inst->slide_origin_y * (1.0f - eased));
+    }
+    return 0;
+}
+
+static float get_fade_amount(RenderTree *node, long long now_ms) {
+    for (int i = 0; i < node->animation_count; i++) {
+        struct AnimInstance *inst = &node->active_animations[i];
+        if (!inst->playing || inst->paused || !inst->def || inst->def->tui_type != TUI_ANIM_FADE)
+            continue;
+        float progress = (float)(now_ms - inst->start_time) / inst->def->duration_ms;
+        if (progress < 0.0f) progress = 0.0f;
+        if (progress > 1.0f) progress = 1.0f;
+        return progress;
+    }
+    return 1.0f;
+}
+
+static int get_typewriter_chars(RenderTree *node) {
+    for (int i = 0; i < node->animation_count; i++) {
+        struct AnimInstance *inst = &node->active_animations[i];
+        if (!inst->playing || inst->paused || !inst->def || inst->def->tui_type != TUI_ANIM_TYPEWRITER)
+            continue;
+        return inst->typewriter_pos;
+    }
+    return -1;
+}
+
 static void render_node(RenderTree *node, int off_x, int off_y,
-                        int max_w, int max_h, char *buf, int buf_sz, bool parent_dirty) {
+                        int max_w, int max_h, char *buf, int buf_sz, bool parent_dirty,
+                        long long now_ms) {
     if (!node || node->rect.w <= 0 || node->rect.h <= 0) return;
-    if (!node->dirty && !parent_dirty) return;
+    if (!node->dirty && !parent_dirty && !has_tui_animation(node)) return;
     bool self_dirty = node->dirty;
     node->dirty = false;
-    int x = off_x + node->rect.x, y = off_y + node->rect.y;
+    int slide_x = get_slide_offset_x(node, now_ms);
+    int slide_y = get_slide_offset_y(node, now_ms);
+    float fade = get_fade_amount(node, now_ms);
+    int typewriter = get_typewriter_chars(node);
+
+    int x = off_x + node->rect.x + slide_x, y = off_y + node->rect.y + slide_y;
     int w = min(node->rect.w, max_w - node->rect.x), h = min(node->rect.h, max_h - node->rect.y);
     if (w <= 0 || h <= 0) return;
     WidgetStyle *ws = &node->resolved_style;
+
+    if (fade < 0.05f) return;
 
     switch (node->type) {
     case RNODE_CONTAINER:
@@ -228,15 +321,27 @@ static void render_node(RenderTree *node, int off_x, int off_y,
             int coy = y + node->u.container.padding.top;
             int cw = w - node->u.container.padding.left - node->u.container.padding.right;
             int ch = h - node->u.container.padding.top - node->u.container.padding.bottom;
-            render_node(child, cox, coy, cw, ch, buf, buf_sz, self_dirty || parent_dirty);
+            render_node(child, cox, coy, cw, ch, buf, buf_sz, self_dirty || parent_dirty, now_ms);
+        }
+        break;
+    case RNODE_FLEX:
+        if (node->u.flex.children) {
+            for (int i = 0; i < node->u.flex.child_count; i++)
+                render_node(&node->u.flex.children[i], x, y, w, h, buf, buf_sz, self_dirty || parent_dirty, now_ms);
+        }
+        break;
+    case RNODE_GRID:
+        if (node->u.grid.children) {
+            for (int i = 0; i < node->u.grid.child_count; i++)
+                render_node(&node->u.grid.children[i], x, y, w, h, buf, buf_sz, self_dirty || parent_dirty, now_ms);
         }
         break;
     case RNODE_TEXT:
-        {
-            WidgetStyle local = *ws;
-            local.text_align = node->u.text.align;
-            draw_text_wrapped(buf, buf_sz, x, y, w, h, node->u.text.content, &local);
+        if (fade < 1.0f) {
+            WidgetStyle dim = *ws;
+            set_dim_style(buf, buf_sz, &dim, fade);
         }
+        draw_text_wrapped(buf, buf_sz, x, y, w, h, node->u.text.content, ws, typewriter);
         break;
     case RNODE_LIST:
         draw_list(buf, buf_sz, x, y, w, h, node->u.list.items, node->u.list.item_count, node->u.list.selected, ws);
@@ -357,21 +462,21 @@ static void render_node(RenderTree *node, int off_x, int off_y,
             lw += strlen(node->u.tabs.tab_labels[i]) + 4;
         }
         if (node->u.tabs.child && h > 1)
-            render_node(node->u.tabs.child, x, y+1, w, h-1, buf, buf_sz, self_dirty || parent_dirty);
+            render_node(node->u.tabs.child, x, y+1, w, h-1, buf, buf_sz, self_dirty || parent_dirty, now_ms);
         break;
     }
     case RNODE_SPLIT_PANES: {
         int sp = node->u.split_panes.split_position > 0 ? node->u.split_panes.split_position :
                   (node->u.split_panes.orientation == ORIENT_HORIZONTAL ? w/2 : h/2);
         if (node->u.split_panes.orientation == ORIENT_HORIZONTAL) {
-            render_node(node->u.split_panes.first, x, y, sp, h, buf, buf_sz, self_dirty || parent_dirty);
+            if (node->u.split_panes.first) render_node(node->u.split_panes.first, x, y, sp, h, buf, buf_sz, self_dirty || parent_dirty, now_ms);
             for (int iy = 0; iy < h; iy++) buf_printf(buf, buf_sz, "\033[%d;%dH│", y+1+iy, x+sp+1);
-            render_node(node->u.split_panes.second, x+sp+1, y, w-sp-1, h, buf, buf_sz, self_dirty || parent_dirty);
+            if (node->u.split_panes.second) render_node(node->u.split_panes.second, x+sp+1, y, w-sp-1, h, buf, buf_sz, self_dirty || parent_dirty, now_ms);
         } else {
-            render_node(node->u.split_panes.first, x, y, w, sp, buf, buf_sz, self_dirty || parent_dirty);
+            if (node->u.split_panes.first) render_node(node->u.split_panes.first, x, y, w, sp, buf, buf_sz, self_dirty || parent_dirty, now_ms);
             buf_printf(buf, buf_sz, "\033[%d;%dH", y+sp+1, x+1);
             for (int ix = 0; ix < w; ix++) buf_printf(buf, buf_sz, "─");
-            render_node(node->u.split_panes.second, x, y+sp+1, w, h-sp-1, buf, buf_sz, self_dirty || parent_dirty);
+            if (node->u.split_panes.second) render_node(node->u.split_panes.second, x, y+sp+1, w, h-sp-1, buf, buf_sz, self_dirty || parent_dirty, now_ms);
         }
         break;
     }
@@ -389,6 +494,48 @@ static void render_node(RenderTree *node, int off_x, int off_y,
         buf_printf(buf, buf_sz, " %s ", node->u.toast.message);
         set_style(buf, buf_sz, NULL);
         break;
+    case RNODE_VECTOR:
+        set_style(buf, buf_sz, ws);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[Vector: %s]", y+1, x+1,
+            node->u.vector.path ? node->u.vector.path : "");
+        set_style(buf, buf_sz, NULL);
+        break;
+    case RNODE_RICH_TEXT:
+        if (node->u.rich_text.spans && node->u.rich_text.spans[0]) {
+            WidgetStyle local = *ws;
+            local.text_align = ALIGN_LEFT;
+            draw_text_wrapped(buf, buf_sz, x, y, w, h, node->u.rich_text.spans, &local, -1);
+        }
+        break;
+    case RNODE_IMAGE:
+        set_style(buf, buf_sz, ws);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[Image: %s]", y+1, x+1,
+            node->u.image.source ? node->u.image.source : "");
+        set_style(buf, buf_sz, NULL);
+        break;
+    case RNODE_CANVAS:
+        set_style(buf, buf_sz, ws);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[Canvas]", y+1, x+1);
+        set_style(buf, buf_sz, NULL);
+        break;
+    case RNODE_MARKDOWN:
+        if (node->u.markdown.content && node->u.markdown.content[0]) {
+            WidgetStyle local = *ws;
+            local.text_align = ALIGN_LEFT;
+            draw_text_wrapped(buf, buf_sz, x, y, w, h, node->u.markdown.content, &local, -1);
+        }
+        break;
+    case RNODE_PLOT:
+        set_style(buf, buf_sz, ws);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[Plot: %s]", y+1, x+1,
+            node->u.plot.type ? node->u.plot.type : "line");
+        set_style(buf, buf_sz, NULL);
+        break;
+    case RNODE_VIDEO:
+        set_style(buf, buf_sz, ws);
+        buf_printf(buf, buf_sz, "\033[%d;%dH[Video]", y+1, x+1);
+        set_style(buf, buf_sz, NULL);
+        break;
     }
 }
 
@@ -396,6 +543,9 @@ void render_tree_to_buf(RenderTree *tree, int off_x, int off_y, int max_w, int m
     buf[0] = '\0';
     if (!tree) return;
     buf_printf(buf, buf_sz, "\033[2J\033[H");
-    render_node(tree, off_x, off_y, max_w, max_h, buf, buf_sz, true);
+    long long now_ms = 0;
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) == 0) now_ms = (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    render_node(tree, off_x, off_y, max_w, max_h, buf, buf_sz, true, now_ms);
     buf_printf(buf, buf_sz, "\033[0m");
 }

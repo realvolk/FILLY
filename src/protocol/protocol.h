@@ -11,6 +11,15 @@ typedef struct {
     char *tty;
     bool relay;
     bool headless;
+    char *anchor;
+    int x, y;
+    char *relative_to;
+    int dx, dy;
+    int z_index;
+    char *overflow;
+    char *tooltip;
+    int tab_index;
+    bool draggable;
 } WidgetRequest;
 
 typedef struct {

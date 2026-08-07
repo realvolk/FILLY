@@ -13,6 +13,9 @@ static void notification_render(Widget *self, RenderTree *out) {
     WidgetBase *base = (WidgetBase *)(self + 1);
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
+    out->accessible.role = "notification";
+    out->accessible.label = d->message;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     if (time(NULL) - d->start > d->duration) {
         out->type = RNODE_TEXT;
         out->rect = rect_new(0, 0, 0, 0);
@@ -51,6 +54,7 @@ Widget *notification_widget_new(const char *message, int duration_sec) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(NotificationData));
     NotificationData *d = (NotificationData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->message = strdup(message);
     d->duration = duration_sec;
     d->start = time(NULL);

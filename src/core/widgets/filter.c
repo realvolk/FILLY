@@ -38,6 +38,9 @@ static void filter_render(Widget *self, RenderTree *out) {
     filter_update(d);
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "filter";
+    out->accessible.label = d->title ? d->title : "Filter";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = (int)(area.w * 0.7f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.8f);
@@ -96,6 +99,7 @@ Widget *filter_widget_new(const char *title, const char *message, char **choices
     FilterData *d = (FilterData *)(w + 1);
     d->base.dirty = true;
     d->base.accepts_text_input = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : NULL;
     d->message = message ? strdup(message) : NULL;
     d->choices = malloc(count * sizeof(char *));

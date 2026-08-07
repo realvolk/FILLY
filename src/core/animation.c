@@ -34,13 +34,16 @@ float ease_elastic(float t) {
 
 float easing_apply(EasingFunction fn, float t) {
     switch (fn) {
-        case EASE_LINEAR:    return ease_linear(t);
-        case EASE_IN:        return ease_in_quad(t);
-        case EASE_OUT:       return ease_out_quad(t);
-        case EASE_IN_OUT:    return ease_in_out_quad(t);
-        case EASE_BOUNCE:    return ease_bounce(t);
-        case EASE_ELASTIC:   return ease_elastic(t);
-        default:             return t;
+        case EASE_LINEAR:        return ease_linear(t);
+        case EASE_IN:            return ease_in_quad(t);
+        case EASE_OUT:           return ease_out_quad(t);
+        case EASE_IN_OUT:        return ease_in_out_quad(t);
+        case EASE_IN_CUBIC:      return ease_in_cubic(t);
+        case EASE_OUT_CUBIC:     return ease_out_cubic(t);
+        case EASE_IN_OUT_CUBIC:  return ease_in_out_cubic(t);
+        case EASE_BOUNCE:        return ease_bounce(t);
+        case EASE_ELASTIC:       return ease_elastic(t);
+        default:                 return t;
     }
 }
 
@@ -68,6 +71,15 @@ float anim_lerp_float(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+Rect anim_lerp_rect(Rect *from, Rect *to, float t) {
+    Rect r;
+    r.x = anim_lerp_int(from->x, to->x, t);
+    r.y = anim_lerp_int(from->y, to->y, t);
+    r.w = anim_lerp_int(from->w, to->w, t);
+    r.h = anim_lerp_int(from->h, to->h, t);
+    return r;
+}
+
 WidgetStyle anim_lerp_style(WidgetStyle *from, WidgetStyle *to, float t) {
     WidgetStyle result = *from;
     if (t <= 0.0f) return *from;
@@ -82,16 +94,39 @@ WidgetStyle anim_lerp_style(WidgetStyle *from, WidgetStyle *to, float t) {
     result.font_size = anim_lerp_int(from->font_size, to->font_size, t);
     result.font_weight = anim_lerp_int(from->font_weight, to->font_weight, t);
     result.opacity = anim_lerp_float(from->opacity, to->opacity, t);
-    result.shadow_offset_x = anim_lerp_int(from->shadow_offset_x, to->shadow_offset_x, t);
-    result.shadow_offset_y = anim_lerp_int(from->shadow_offset_y, to->shadow_offset_y, t);
-    result.shadow_blur = anim_lerp_int(from->shadow_blur, to->shadow_blur, t);
-    result.shadow_color = anim_lerp_color(from->shadow_color, to->shadow_color, t);
-    result.bg_gradient_to = anim_lerp_color(from->bg_gradient_to, to->bg_gradient_to, t);
     result.scale_x = anim_lerp_float(from->scale_x, to->scale_x, t);
     result.scale_y = anim_lerp_float(from->scale_y, to->scale_y, t);
     result.rotation = anim_lerp_float(from->rotation, to->rotation, t);
     result.translate_x = anim_lerp_float(from->translate_x, to->translate_x, t);
     result.translate_y = anim_lerp_float(from->translate_y, to->translate_y, t);
+    result.backdrop_blur = anim_lerp_int(from->backdrop_blur, to->backdrop_blur, t);
+
+    int max_shadows = from->shadow_count > to->shadow_count ? from->shadow_count : to->shadow_count;
+    result.shadow_count = max_shadows;
+    for (int i = 0; i < max_shadows; i++) {
+        ShadowLayer *sf = (i < from->shadow_count) ? &from->shadows[i] : &from->shadows[from->shadow_count - 1];
+        ShadowLayer *st = (i < to->shadow_count) ? &to->shadows[i] : &to->shadows[to->shadow_count - 1];
+        result.shadows[i].offset_x = anim_lerp_int(sf->offset_x, st->offset_x, t);
+        result.shadows[i].offset_y = anim_lerp_int(sf->offset_y, st->offset_y, t);
+        result.shadows[i].blur = anim_lerp_int(sf->blur, st->blur, t);
+        result.shadows[i].spread = anim_lerp_int(sf->spread, st->spread, t);
+        result.shadows[i].color = anim_lerp_color(sf->color, st->color, t);
+    }
+
+    if (from->gradient.type != GRADIENT_NONE && to->gradient.type != GRADIENT_NONE) {
+        result.gradient.type = to->gradient.type;
+        result.gradient.angle = anim_lerp_float(from->gradient.angle, to->gradient.angle, t);
+        result.gradient.center_x = anim_lerp_float(from->gradient.center_x, to->gradient.center_x, t);
+        result.gradient.center_y = anim_lerp_float(from->gradient.center_y, to->gradient.center_y, t);
+        int stops = from->gradient.stop_count > to->gradient.stop_count ? from->gradient.stop_count : to->gradient.stop_count;
+        result.gradient.stop_count = stops;
+        for (int i = 0; i < stops && i < MAX_GRADIENT_STOPS; i++) {
+            GradientStop *gf = (i < from->gradient.stop_count) ? &from->gradient.stops[i] : &from->gradient.stops[from->gradient.stop_count - 1];
+            GradientStop *gt = (i < to->gradient.stop_count) ? &to->gradient.stops[i] : &to->gradient.stops[to->gradient.stop_count - 1];
+            result.gradient.stops[i].offset = anim_lerp_float(gf->offset, gt->offset, t);
+            result.gradient.stops[i].color = anim_lerp_color(gf->color, gt->color, t);
+        }
+    }
 
     for (int i = 0; i < 4; i++) {
         result.padding[i] = anim_lerp_int(from->padding[i], to->padding[i], t);
@@ -133,9 +168,20 @@ static EasingFunction parse_easing(const char *s) {
     if (strcmp(s, "ease-in") == 0) return EASE_IN;
     if (strcmp(s, "ease-out") == 0) return EASE_OUT;
     if (strcmp(s, "ease-in-out") == 0) return EASE_IN_OUT;
+    if (strcmp(s, "ease-in-cubic") == 0) return EASE_IN_CUBIC;
+    if (strcmp(s, "ease-out-cubic") == 0) return EASE_OUT_CUBIC;
+    if (strcmp(s, "ease-in-out-cubic") == 0) return EASE_IN_OUT_CUBIC;
     if (strcmp(s, "bounce") == 0) return EASE_BOUNCE;
     if (strcmp(s, "elastic") == 0) return EASE_ELASTIC;
     return EASE_LINEAR;
+}
+
+static TuiAnimType parse_tui_type(const char *s) {
+    if (!s) return TUI_ANIM_NONE;
+    if (strcmp(s, "slide-in") == 0) return TUI_ANIM_SLIDE_IN;
+    if (strcmp(s, "fade") == 0) return TUI_ANIM_FADE;
+    if (strcmp(s, "typewriter") == 0) return TUI_ANIM_TYPEWRITER;
+    return TUI_ANIM_NONE;
 }
 
 void animation_registry_load_from_theme(cJSON *animations_json) {
@@ -149,6 +195,7 @@ void animation_registry_load_from_theme(cJSON *animations_json) {
         cJSON *auto_rev = cJSON_GetObjectItem(child, "auto_reverse");
         cJSON *trigger = cJSON_GetObjectItem(child, "on_complete");
         cJSON *fil_comp = cJSON_GetObjectItem(child, "fil_on_complete");
+        cJSON *tui_type = cJSON_GetObjectItem(child, "tui");
         cJSON *keyframes_arr = cJSON_GetObjectItem(child, "keyframes");
 
         if (!keyframes_arr || !cJSON_IsArray(keyframes_arr)) { child = child->next; continue; }
@@ -162,6 +209,7 @@ void animation_registry_load_from_theme(cJSON *animations_json) {
         def->auto_reverse = auto_rev ? (auto_rev->type == cJSON_True) : false;
         if (trigger && trigger->valuestring) def->trigger_on_complete = strdup(trigger->valuestring);
         if (fil_comp && fil_comp->valuestring) def->fil_on_complete = strdup(fil_comp->valuestring);
+        if (tui_type && tui_type->valuestring) def->tui_type = parse_tui_type(tui_type->valuestring);
         def->keyframe_count = kf_count;
         def->keyframes = calloc(kf_count, sizeof(AnimKeyframe));
 
@@ -187,6 +235,10 @@ void animation_registry_load_from_theme(cJSON *animations_json) {
             cJSON *rot = cJSON_GetObjectItem(kf, "rotation");
             cJSON *tx = cJSON_GetObjectItem(kf, "translate_x");
             cJSON *ty = cJSON_GetObjectItem(kf, "translate_y");
+            cJSON *rx = cJSON_GetObjectItem(kf, "x");
+            cJSON *ry = cJSON_GetObjectItem(kf, "y");
+            cJSON *rw = cJSON_GetObjectItem(kf, "w");
+            cJSON *rh = cJSON_GetObjectItem(kf, "h");
 
             if (fg && fg->valuestring) { k->fg_color = parse_color(fg->valuestring); k->has_fg = true; }
             if (bg && bg->valuestring) { k->bg_color = parse_color(bg->valuestring); k->has_bg = true; }
@@ -202,6 +254,10 @@ void animation_registry_load_from_theme(cJSON *animations_json) {
             if (rot) { k->rotation = (float)rot->valuedouble; k->has_rotation = true; }
             if (tx) { k->translate_x = (float)tx->valuedouble; k->has_translate = true; }
             if (ty) { k->translate_y = (float)ty->valuedouble; k->has_translate = true; }
+            if (rx) { k->rect_x = rx->valueint; k->has_rect = true; }
+            if (ry) { k->rect_y = ry->valueint; k->has_rect = true; }
+            if (rw) { k->rect_w = rw->valueint; k->has_rect = true; }
+            if (rh) { k->rect_h = rh->valueint; k->has_rect = true; }
         }
 
         animation_registry_register(name, def);
@@ -237,6 +293,8 @@ void animation_play_custom(RenderTree *tree, AnimationDef *def, long long now_ms
             tree->active_animations[i].next_keyframe = def->keyframe_count > 1 ? 1 : 0;
             tree->active_animations[i].loop_iteration = 0;
             tree->active_animations[i].reversed = false;
+            tree->active_animations[i].typewriter_pos = 0;
+            tree->active_animations[i].typewriter_last_ms = now_ms;
             return;
         }
     }
@@ -251,6 +309,8 @@ void animation_play_custom(RenderTree *tree, AnimationDef *def, long long now_ms
     inst->speed = 1.0f;
     inst->def = def;
     inst->next_keyframe = def->keyframe_count > 1 ? 1 : 0;
+    inst->typewriter_pos = 0;
+    inst->typewriter_last_ms = now_ms;
 }
 
 void animation_stop(RenderTree *tree, const char *name) {
@@ -285,8 +345,50 @@ void animation_resume(RenderTree *tree, const char *name, long long now_ms) {
     }
 }
 
-void animation_update(RenderTree *tree, long long now_ms) {
+void animation_slide_init(RenderTree *tree, const char *name, int from_x, int from_y) {
+    if (!tree || !name) return;
+    for (int i = 0; i < tree->animation_count; i++) {
+        if (strcmp(tree->active_animations[i].animation_name, name) == 0) {
+            tree->active_animations[i].slide_origin_x = from_x;
+            tree->active_animations[i].slide_origin_y = from_y;
+            return;
+        }
+    }
+}
+
+void animation_update(RenderTree *tree, long long now_ms, bool prefers_reduced_motion) {
     if (!tree || tree->animation_count == 0) return;
+    if (prefers_reduced_motion) {
+        for (int i = 0; i < tree->animation_count; i++) {
+            AnimInstance *inst = &tree->active_animations[i];
+            if (inst->playing && !inst->paused && inst->def && inst->def->keyframe_count > 0) {
+                AnimKeyframe *last = &inst->def->keyframes[inst->def->keyframe_count - 1];
+                WidgetStyle to_style = tree->resolved_style;
+                if (last->has_fg) to_style.fg_color = last->fg_color;
+                if (last->has_bg) to_style.bg_color = last->bg_color;
+                if (last->has_border) to_style.border_color = last->border_color;
+                if (last->has_accent) to_style.accent_color = last->accent_color;
+                if (last->has_border_width) to_style.border_width = last->border_width;
+                if (last->has_border_radius) to_style.border_radius = last->border_radius;
+                if (last->has_font_size) to_style.font_size = last->font_size;
+                if (last->has_font_weight) to_style.font_weight = last->font_weight;
+                if (last->has_opacity) to_style.opacity = last->opacity;
+                if (last->has_scale) { to_style.scale_x = last->scale_x; to_style.scale_y = last->scale_y; }
+                if (last->has_rotation) to_style.rotation = last->rotation;
+                if (last->has_translate) { to_style.translate_x = last->translate_x; to_style.translate_y = last->translate_y; }
+                if (last->has_rect) {
+                    tree->rect.x = last->rect_x;
+                    tree->rect.y = last->rect_y;
+                    tree->rect.w = last->rect_w;
+                    tree->rect.h = last->rect_h;
+                }
+                tree->resolved_style = to_style;
+                inst->playing = false;
+                tree->dirty = true;
+            }
+        }
+        return;
+    }
 
     for (int i = 0; i < tree->animation_count; i++) {
         AnimInstance *inst = &tree->active_animations[i];
@@ -384,12 +486,31 @@ void animation_update(RenderTree *tree, long long now_ms) {
         if (tk->has_rotation) to_style.rotation = tk->rotation;
         if (tk->has_translate) { to_style.translate_x = tk->translate_x; to_style.translate_y = tk->translate_y; }
 
+        if (fk->has_rect || tk->has_rect) {
+            Rect from_rect = tree->rect;
+            Rect to_rect = tree->rect;
+            if (fk->has_rect) { from_rect.x = fk->rect_x; from_rect.y = fk->rect_y; from_rect.w = fk->rect_w; from_rect.h = fk->rect_h; }
+            if (tk->has_rect) { to_rect.x = tk->rect_x; to_rect.y = tk->rect_y; to_rect.w = tk->rect_w; to_rect.h = tk->rect_h; }
+            Rect r = anim_lerp_rect(&from_rect, &to_rect, eased_t);
+            tree->rect.x = r.x;
+            tree->rect.y = r.y;
+            tree->rect.w = r.w;
+            tree->rect.h = r.h;
+        }
+
         WidgetStyle result = anim_lerp_style(&from_style, &to_style, eased_t);
         tree->resolved_style = result;
 
         inst->current_keyframe = kf_from;
         inst->next_keyframe = kf_to;
         inst->segment_progress = segment_t;
+
+        if (def->tui_type == TUI_ANIM_TYPEWRITER) {
+            if (now_ms - inst->typewriter_last_ms >= 30) {
+                inst->typewriter_pos++;
+                inst->typewriter_last_ms = now_ms;
+            }
+        }
 
         tree->dirty = true;
     }

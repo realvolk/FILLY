@@ -21,6 +21,9 @@ static void tree_render(Widget *self, RenderTree *out) {
     }
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "tree";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = (int)(area.w * 0.7f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.8f);
@@ -81,6 +84,7 @@ static void tree_destroy(Widget *self) {
 Widget *tree_widget_new(const char *title, TreeNode *nodes, int node_count) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(TreeData));
     TreeData data = { .title = strdup(title), .nodes = nodes, .node_count = node_count, .flat_indices = NULL, .flat_count = 0, .cursor = 0 };
+    data.base.tab_index = -1;
     widget_base_init(w, &data, sizeof(TreeData), tree_render, tree_handle_event, tree_destroy);
     return w;
 }

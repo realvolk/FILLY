@@ -12,6 +12,9 @@ static void sp_render(Widget *self, RenderTree *out) {
     memset(out, 0, sizeof(*out));
     out->type = RNODE_SPLIT_PANES;
     out->style_class = "split_panes";
+    out->accessible.role = "split-panes";
+    out->accessible.label = "";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     out->u.split_panes.orientation = d->orientation;
     out->u.split_panes.split_position = d->split_position > 0 ? d->split_position :
         (d->orientation == ORIENT_HORIZONTAL ? area.w / 2 : area.h / 2);
@@ -46,6 +49,7 @@ Widget *split_panes_widget_new(Orientation orientation, Widget *first, Widget *s
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SplitPanesData));
     SplitPanesData data = { .orientation = orientation, .first = first, .second = second,
                             .split_position = 0, .active_pane = 0 };
+    data.base.tab_index = -1;
     widget_base_init(w, &data, sizeof(SplitPanesData), sp_render, sp_handle_event, sp_destroy);
     return w;
 }

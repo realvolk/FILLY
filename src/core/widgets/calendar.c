@@ -24,6 +24,9 @@ static void calendar_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "calendar";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int is_gui = (area.w > 200);
     int ch = is_gui ? 30 : 1;
     int box_w = is_gui ? 560 : 40;
@@ -61,8 +64,6 @@ static void calendar_render(Widget *self, RenderTree *out) {
     out->u.container.padding = edgeinsets_zero();
     out->u.container.children = children;
     out->u.container.child_count = 3;
-
-    (void)d; /* suppress unused warning if not used below */
 }
 
 static EventResult calendar_handle_event(Widget *self, Event *ev, Backend *backend) {
@@ -107,6 +108,7 @@ Widget *calendar_widget_new(const char *title) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(CalendarData));
     CalendarData *d = (CalendarData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     time_t t = time(NULL);
     struct tm *tm = localtime(&t);

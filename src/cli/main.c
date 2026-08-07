@@ -1,4 +1,3 @@
-/* ===== src/cli/main.c ===== */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -291,6 +290,31 @@ static int cmd_build(int argc, char **argv) {
     return 0;
 }
 
+static int cmd_inspect(int argc, char **argv) {
+    const char *socket_path = NULL;
+    for (int i = 2; i < argc; i++) {
+        if (!strcmp(argv[i], "--socket") && i+1<argc) socket_path = argv[++i];
+    }
+    if (!socket_path) {
+        static char def[256]; const char *xdg = getenv("XDG_RUNTIME_DIR");
+        snprintf(def, sizeof(def), "%s/filly.sock", xdg ? xdg : "/tmp");
+        socket_path = def;
+    }
+    FillyClient *c = filly_client_connect(socket_path);
+    if (!c) { fprintf(stderr, "Cannot connect to daemon\n"); return 1; }
+    printf("{\"connected\":true}\n");
+    filly_client_disconnect(c);
+    return 0;
+}
+
+static int cmd_profile(void) {
+    printf("{\"fps\":%.1f,\"arena_kb\":%zu,\"reduced_motion\":%s}\n",
+        session_current_fps,
+        g_session_arena ? g_session_arena->offset / 1024 : 0,
+        session_prefers_reduced_motion ? "true" : "false");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) { printf("Usage: filly [command]\n"); return 1; }
     for (int i = 1; i < argc; i++)
@@ -305,11 +329,17 @@ int main(int argc, char **argv) {
     if (!g_active_theme) g_active_theme = theme_default();
     theme_merge_user_override(g_active_theme);
 
+    FillyConfig cfg;
+    config_load(&cfg, NULL);
+    if (cfg.prefers_reduced_motion) session_prefers_reduced_motion = true;
+
     if (!strcmp(argv[1], "send"))     return cmd_send(argc, argv);
     if (!strcmp(argv[1], "build"))    return cmd_build(argc, argv);
     if (!strcmp(argv[1], "compile"))  return cmd_compile(argc, argv);
     if (!strcmp(argv[1], "update"))   return cmd_update();
     if (!strcmp(argv[1], "test"))     { printf("{\"status\":\"ok\"}\n"); return 0; }
+    if (!strcmp(argv[1], "inspect"))  return cmd_inspect(argc, argv);
+    if (!strcmp(argv[1], "profile"))  return cmd_profile();
 
     if (!strcmp(argv[1], "daemon")) {
         const char *socket = NULL, *theme_path = NULL; bool sandbox = false;

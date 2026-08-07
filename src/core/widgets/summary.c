@@ -14,6 +14,9 @@ static void summary_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "summary";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : -1;
     int box_w = (int)(area.w * 0.8f);
     if (box_w > area.w - 2) box_w = area.w - 2;
     int box_h = (int)(area.h * 0.8f);
@@ -62,6 +65,7 @@ Widget *summary_widget_new(const char *title, const char *message, const char *f
     Widget *w = calloc(1, sizeof(Widget) + sizeof(SummaryData));
     SummaryData *d = (SummaryData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     if (file_path) {
         FILE *f = fopen(file_path, "r");

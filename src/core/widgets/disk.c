@@ -40,6 +40,9 @@ static void disk_render(Widget *self, RenderTree *out) {
     memset(out, 0, sizeof(*out));
     out->type = RNODE_CONTAINER;
     out->style_class = "container";
+    out->accessible.role = "disk-partitioner";
+    out->accessible.label = d->title;
+    out->tab_index = d->base.tab_index >= 0 ? d->base.tab_index : 0;
     out->u.container.border = BORDER_SINGLE;
     out->u.container.padding = edgeinsets_zero();
 
@@ -118,6 +121,7 @@ static void disk_destroy(Widget *self) { DiskData *d = (DiskData *)(self + 1); f
 Widget *disk_widget_new(const char *title, const char *disk, cJSON *partitions_json, cJSON *free_space_json, bool readonly) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(DiskData));
     DiskData data = { .title = strdup(title), .disk = strdup(disk), .readonly = readonly, .selected = 0, .mode = DMODE_MAIN };
+    data.base.tab_index = -1;
     if (partitions_json && cJSON_IsArray(partitions_json)) { data.part_count = cJSON_GetArraySize(partitions_json); data.partitions = calloc(data.part_count, sizeof(Partition)); int i=0; cJSON *item; cJSON_ArrayForEach(item, partitions_json) { cJSON *n=cJSON_GetObjectItem(item,"number"); cJSON *s=cJSON_GetObjectItem(item,"start"); cJSON *e=cJSON_GetObjectItem(item,"end"); cJSON *sz=cJSON_GetObjectItem(item,"size"); cJSON *t=cJSON_GetObjectItem(item,"type"); data.partitions[i].number = n?n->valueint:i+1; data.partitions[i].start = s&&s->valuestring?strdup(s->valuestring):strdup(""); data.partitions[i].end = e&&e->valuestring?strdup(e->valuestring):strdup(""); data.partitions[i].size = sz&&sz->valuestring?strdup(sz->valuestring):strdup(""); data.partitions[i].ptype = t&&t->valuestring?strdup(t->valuestring):strdup(""); i++; } }
     if (free_space_json && cJSON_IsArray(free_space_json)) { data.free_count = cJSON_GetArraySize(free_space_json); data.free_space = calloc(data.free_count, sizeof(FreeSpace)); int i=0; cJSON *item; cJSON_ArrayForEach(item, free_space_json) { cJSON *s=cJSON_GetObjectItem(item,"start"); cJSON *e=cJSON_GetObjectItem(item,"end"); cJSON *sz=cJSON_GetObjectItem(item,"size"); data.free_space[i].start = s&&s->valuestring?strdup(s->valuestring):strdup("0"); data.free_space[i].end = e&&e->valuestring?strdup(e->valuestring):strdup("0"); data.free_space[i].size = sz&&sz->valuestring?strdup(sz->valuestring):strdup("0"); i++; } }
     widget_base_init(w, &data, sizeof(DiskData), disk_render, disk_handle_event, disk_destroy);

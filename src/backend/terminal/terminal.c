@@ -10,6 +10,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <poll.h>
 
 static volatile sig_atomic_t term_resized = 0;
 static void handle_sigwinch(int sig) { (void)sig; term_resized = 1; }
@@ -55,48 +56,6 @@ static char *term_paste_from_clipboard(void *self) {
     (void)self;
     return NULL;
 }
-
-#if 0
-static void term_write_diff(TerminalBackend *t, const char *new_buf, int new_len,
-                             int w, int h) {
-    if (!t->prev_buf || t->prev_w != w || t->prev_h != h) {
-        write_all(t->tty_fd, "\033[2J\033[H", 7);
-        write_all(t->tty_fd, new_buf, new_len);
-        return;
-    }
-
-    int min_h = t->prev_h < h ? t->prev_h : h;
-    int row_w = w;
-    int first_changed = -1, last_changed = -1;
-
-    for (int row = 0; row < min_h; row++) {
-        int off = row * row_w;
-        if (off + row_w > t->prev_len || off + row_w > new_len) break;
-        if (memcmp(t->prev_buf + off, new_buf + off, row_w) != 0) {
-            if (first_changed < 0) first_changed = row;
-            last_changed = row;
-        }
-    }
-
-    if (first_changed < 0) return;
-
-    for (int row = first_changed; row <= last_changed; row++) {
-        int off = row * row_w;
-        const char *prev_row = t->prev_buf + off;
-        const char *new_row = new_buf + off;
-        int start = 0;
-        while (start < row_w) {
-            while (start < row_w && prev_row[start] == new_row[start]) start++;
-            if (start >= row_w) break;
-            int end = start;
-            while (end < row_w && prev_row[end] != new_row[end]) end++;
-            dprintf(t->tty_fd, "\033[%d;%dH", row + 1, start + 1);
-            write_all(t->tty_fd, new_row + start, end - start);
-            start = end;
-        }
-    }
-}
-#endif
 
 static bool term_setup(void *self) {
     TerminalBackend *t = (TerminalBackend *)self;
@@ -153,6 +112,11 @@ static void term_get_size(void *self, int *w, int *h) {
         if (ioctl(t->tty_fd, TIOCGWINSZ, &ws) == 0) { *w = ws.ws_col; *h = ws.ws_row; }
         term_resized = 0;
     }
+}
+
+static void term_wait_frame(void *self) {
+    (void)self;
+    poll(NULL, 0, 16);
 }
 
 static int read_byte_timeout(int fd, int timeout_ms) {
@@ -316,7 +280,7 @@ BackendVTable terminal_vtable = {
     .next_event = term_next_event,
     .teardown = term_teardown,
     .get_size = term_get_size,
-    .wait_frame = NULL,
+    .wait_frame = term_wait_frame,
     .copy_to_clipboard = term_copy_to_clipboard,
     .paste_from_clipboard = term_paste_from_clipboard,
     .is_interactive = true,

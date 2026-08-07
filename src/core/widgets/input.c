@@ -31,6 +31,9 @@ static void input_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "input";
+    out->accessible.label = d->title ? d->title : "Input";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 60, box_h = 10;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -119,6 +122,7 @@ Widget *input_widget_new(const char *title, const char *message, const char *def
     InputData *d = (InputData *)(w + 1);
     d->base.dirty = true;
     d->base.accepts_text_input = true;
+    d->base.tab_index = -1;
     d->title = title ? strdup(title) : NULL;
     d->message = message ? strdup(message) : NULL;
     d->text = default_text ? strdup(default_text) : strdup("");

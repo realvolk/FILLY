@@ -23,6 +23,9 @@ static void mr_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "macro-recorder";
+    out->accessible.label = "Macro Recorder";
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
 
     int box_w = 50, box_h = 8;
     if (box_w > area.w - 2) box_w = area.w - 2;
@@ -142,6 +145,7 @@ Widget *macro_recorder_widget_new(void) {
     Widget *w = calloc(1, sizeof(Widget) + sizeof(MacroRecorderData));
     MacroRecorderData *d = (MacroRecorderData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->recording = false;
     d->save_path = strdup("");
     d->mode = MR_BROWSING;

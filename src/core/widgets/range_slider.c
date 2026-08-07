@@ -14,6 +14,9 @@ static void rs_render(Widget *self, RenderTree *out) {
     Rect area = base->render_area;
     memset(out, 0, sizeof(*out));
     out->style_class = "container";
+    out->accessible.role = "range-slider";
+    out->accessible.label = d->title;
+    out->tab_index = base->tab_index >= 0 ? base->tab_index : 0;
     int box_w = 50, box_h = 7;
     if (box_w > area.w - 2) box_w = area.w - 2;
     if (box_h > area.h - 2) box_h = area.h - 2;
@@ -88,6 +91,7 @@ Widget *range_slider_widget_new(const char *title, int min, int max, int value, 
     Widget *w = calloc(1, sizeof(Widget) + sizeof(RangeSliderData));
     RangeSliderData *d = (RangeSliderData *)(w + 1);
     d->base.dirty = true;
+    d->base.tab_index = -1;
     d->title = strdup(title);
     d->min = min;
     d->max = max;

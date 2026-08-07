@@ -34,6 +34,9 @@ SRCS = src/cli/main.c \
        src/core/shm_ipc.c \
        src/core/recorder.c \
        src/core/animation.c \
+       src/core/accessibility.c \
+       src/core/shaper.c \
+       src/core/vector.c \
        src/backend/terminal/terminal.c \
        src/backend/terminal/renderer.c \
        src/backend/headless/headless.c \
@@ -81,7 +84,12 @@ SRCS = src/cli/main.c \
        src/core/widgets/hub.c \
        src/core/widgets/terminal_emulator.c \
        src/core/widgets/widget_builder.c \
-       src/core/widgets/macro_recorder.c
+       src/core/widgets/macro_recorder.c \
+       src/core/widgets/image.c \
+       src/core/widgets/canvas.c \
+       src/core/widgets/markdown.c \
+       src/core/widgets/plot.c \
+       src/core/widgets/video.c
 
 GCORE_SRCS = src/xdg-shell.c
 
@@ -115,7 +123,7 @@ LIBFILLY_SRCS = $(filter-out src/cli/main.c src/backend/daemon/daemon.c, $(SRCS)
 all: filly plugins
 
 filly: $(SRCS) $(GCORE_SRCS) src/cJSON.o
-	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -Wno-pedantic -DFILLY_GCORE -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
 src/cJSON.o: src/cJSON.c src/cJSON.h
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -140,8 +148,11 @@ filly-test: test/test.c $(TEST_SRCS) src/cJSON.o
 test: filly-test
 	./filly-test
 
-pixel-test: test/pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/core/animation.c src/cJSON.o
+pixel-test: test/pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/core/animation.c src/core/shaper.c src/core/vector.c src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -o pixel-test $^ $(LDFLAGS) $(GCORE_LDFLAGS)
+
+v2-pixel-test: test/v2_pixel_test.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/core/animation.c src/core/shaper.c src/core/vector.c src/cJSON.o
+	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -o test/v2_pixel_test $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
 BUILDER_SRCS = src/builder/filly_build.c \
                src/builder/project.c \
@@ -157,7 +168,7 @@ filly-build: $(BUILDER_SRCS) src/core/widget.c src/core/widget_base.c \
              src/core/arena.c src/core/undo.c src/core/clipboard.c \
              src/core/client.c src/core/log.c src/core/config.c \
              src/core/i18n.c src/core/shm_ipc.c src/core/recorder.c \
-             src/core/animation.c \
+             src/core/animation.c src/core/shaper.c src/core/vector.c \
              src/script/fil.c src/protocol/protocol.c src/protocol/schema.c \
              src/backend/headless/headless.c src/backend/terminal/renderer.c \
              src/backend/gcore/renderer.c \
@@ -180,6 +191,9 @@ filly-build: $(BUILDER_SRCS) src/core/widget.c src/core/widget_base.c \
              src/core/widgets/terminal_emulator.c \
              src/core/widgets/widget_builder.c \
              src/core/widgets/macro_recorder.c \
+             src/core/widgets/image.c src/core/widgets/canvas.c \
+             src/core/widgets/markdown.c src/core/widgets/plot.c \
+             src/core/widgets/video.c \
              src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -Isrc/builder -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
@@ -202,7 +216,7 @@ tools/sign: tools/sign.c
 tools/verify: tools/verify.c
 	$(CC) $(CFLAGS) -o $@ $< -lsodium
 
-snapshot: test/snapshot.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/cJSON.o
+snapshot: test/snapshot.c src/backend/gcore/renderer.c src/core/render.c src/core/theme.c src/core/arena.c src/core/shaper.c src/core/vector.c src/cJSON.o
 	$(CC) $(CFLAGS) $(GCORE_CFLAGS) -o $@ $^ $(LDFLAGS) $(GCORE_LDFLAGS)
 
 artixforge-hub: plugins/artixforge/artixforge-hub.c src/core/client.c src/cJSON.o
@@ -243,10 +257,13 @@ test-bench: test/benchmark.c $(TEST_SRCS) src/cJSON.o
 test-full: filly filly-build pixel-test
 	./test/harness_full.sh
 
-test-all: test test-tui test-gui test-fault test-bench test-full
+test-v2: filly filly-test v2-pixel-test
+	./test/harness_v2.sh
+
+test-all: test test-tui test-gui test-fault test-bench test-full test-v2
 
 lint:
-	clang-tidy src/cli/main.c src/protocol/protocol.c src/protocol/schema.c src/core/render.c src/core/layout.c src/core/widget.c src/core/session.c src/core/store.c src/core/theme.c src/core/client.c src/backend/daemon/daemon.c src/backend/terminal/terminal.c src/backend/gcore/renderer.c -- $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE
+	clang-tidy src/cli/main.c src/protocol/protocol.c src/protocol/schema.c src/core/render.c src/core/layout.c src/core/widget.c src/core/session.c src/core/store.c src/core/theme.c src/core/client.c src/backend/daemon/daemon.c src/backend/terminal/terminal.c src/backend/gcore/renderer.c src/core/shaper.c src/core/vector.c -- $(CFLAGS) $(GCORE_CFLAGS) -DFILLY_GCORE
 
 cppcheck:
 	cppcheck --enable=all --suppress=missingIncludeSystem --std=c99 -Isrc -Isrc/filly-port src/
@@ -254,6 +271,6 @@ cppcheck:
 plugins: libartixforge.so libgforge.so libforgelfs.so
 
 clean:
-	rm -f filly filly-build src/cJSON.o libartixforge.so libgforge.so libforgelfs.so libfilly.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz
+	rm -f filly filly-build src/cJSON.o libartixforge.so libgforge.so libforgelfs.so libfilly.so filly-test artixforge-hub snapshot test-unit-arena test-unit-theme test-unit-session test-unit-render protocol_fuzz test/v2_pixel_test
 
-.PHONY: all plugins install clean test test-unit test-fuzz test-fault test-bench tools bindings lint cppcheck
+.PHONY: all plugins install clean test test-unit test-fuzz test-fault test-bench test-v2 test-all tools bindings lint cppcheck

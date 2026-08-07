@@ -19,3 +19,4 @@ bool gcore_init_font(const char *font_path, int default_size);
 void gcore_shutdown_font(void);
 void gcore_render_tree_to_pixels(RenderTree *tree, PixelBuffer *pb, Theme *theme, Arena *arena);
 uint32_t gcore_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+void gcore_draw_rect(PixelBuffer *pb, int x, int y, int w, int h, uint32_t color);

@@ -125,13 +125,122 @@ static bool parse_bool(cJSON *o, const char *key, bool def) {
     return def;
 }
 
-static char *resolve_var(Theme *t, const char *value);
-
 static Alignment parse_align(const char *s) {
     if (!s) return ALIGN_LEFT;
     if (strcmp(s, "center") == 0) return ALIGN_CENTER;
     if (strcmp(s, "right") == 0) return ALIGN_RIGHT;
     return ALIGN_LEFT;
+}
+
+static BorderStyle parse_border_style(const char *s) {
+    if (!s) return BORDER_SOLID;
+    if (strcmp(s, "none") == 0) return BORDER_NONE;
+    if (strcmp(s, "solid") == 0) return BORDER_SOLID;
+    if (strcmp(s, "dashed") == 0) return BORDER_DASHED;
+    if (strcmp(s, "dotted") == 0) return BORDER_DOTTED;
+    if (strcmp(s, "double") == 0) return BORDER_DOUBLE;
+    if (strcmp(s, "rounded") == 0) return BORDER_ROUNDED;
+    return BORDER_SOLID;
+}
+
+static CursorStyle parse_cursor_style(const char *s) {
+    if (!s) return CURSOR_DEFAULT;
+    if (strcmp(s, "default") == 0) return CURSOR_DEFAULT;
+    if (strcmp(s, "pointer") == 0) return CURSOR_POINTER;
+    if (strcmp(s, "text") == 0) return CURSOR_TEXT;
+    if (strcmp(s, "move") == 0) return CURSOR_MOVE;
+    if (strcmp(s, "not-allowed") == 0) return CURSOR_NOT_ALLOWED;
+    return CURSOR_DEFAULT;
+}
+
+static void parse_shadow_array(cJSON *obj, WidgetStyle *s, Theme *t) {
+    cJSON *shadows = cJSON_GetObjectItem(obj, "shadow");
+    if (!shadows || !cJSON_IsArray(shadows)) {
+        int ox = parse_int(obj, "shadow_offset_x", 0);
+        int oy = parse_int(obj, "shadow_offset_y", 0);
+        int blur = parse_int(obj, "shadow_blur", 0);
+        int spread = parse_int(obj, "shadow_spread", 0);
+        cJSON *shcol = cJSON_GetObjectItem(obj, "shadow_color");
+        if (blur > 0 || (shcol && shcol->valuestring)) {
+            s->shadows[0].offset_x = ox;
+            s->shadows[0].offset_y = oy;
+            s->shadows[0].blur = blur;
+            s->shadows[0].spread = spread;
+            if (shcol && shcol->valuestring) {
+                char *v = resolve_var(t, shcol->valuestring);
+                s->shadows[0].color = parse_color(v);
+                free(v);
+            }
+            s->shadow_count = 1;
+        }
+        return;
+    }
+    int count = cJSON_GetArraySize(shadows);
+    if (count > MAX_SHADOWS) count = MAX_SHADOWS;
+    s->shadow_count = count;
+    for (int i = 0; i < count; i++) {
+        cJSON *sh = cJSON_GetArrayItem(shadows, i);
+        if (!sh) continue;
+        s->shadows[i].offset_x = parse_int(sh, "offset_x", 0);
+        s->shadows[i].offset_y = parse_int(sh, "offset_y", 2);
+        s->shadows[i].blur = parse_int(sh, "blur", 4);
+        s->shadows[i].spread = parse_int(sh, "spread", 0);
+        cJSON *col = cJSON_GetObjectItem(sh, "color");
+        if (col && col->valuestring) {
+            char *v = resolve_var(t, col->valuestring);
+            s->shadows[i].color = parse_color(v);
+            free(v);
+        } else {
+            s->shadows[i].color = rgba(0, 0, 0, 80);
+        }
+    }
+}
+
+static void parse_gradient(cJSON *obj, WidgetStyle *s, Theme *t) {
+    cJSON *grad = cJSON_GetObjectItem(obj, "bg_gradient");
+    if (!grad || !cJSON_IsObject(grad)) {
+        bool has = parse_bool(obj, "bg_gradient", false);
+        if (has) {
+            s->gradient.type = GRADIENT_LINEAR;
+            s->gradient.angle = 180.0f;
+            s->gradient.stop_count = 2;
+            s->gradient.stops[0].offset = 0.0f;
+            s->gradient.stops[0].color = s->bg_color;
+            s->gradient.stops[1].offset = 1.0f;
+            cJSON *gradto = cJSON_GetObjectItem(obj, "bg_gradient_to");
+            if (gradto && gradto->valuestring) {
+                char *v = resolve_var(t, gradto->valuestring);
+                s->gradient.stops[1].color = parse_color(v);
+                free(v);
+            }
+            s->gradient.angle = parse_float(obj, "bg_gradient_direction", 180.0f);
+        }
+        return;
+    }
+    cJSON *type = cJSON_GetObjectItem(grad, "type");
+    s->gradient.type = GRADIENT_LINEAR;
+    if (type && type->valuestring && strcmp(type->valuestring, "radial") == 0)
+        s->gradient.type = GRADIENT_RADIAL;
+    s->gradient.angle = parse_float(grad, "angle", 180.0f);
+    s->gradient.center_x = parse_float(grad, "center_x", 0.5f);
+    s->gradient.center_y = parse_float(grad, "center_y", 0.5f);
+    cJSON *stops = cJSON_GetObjectItem(grad, "stops");
+    if (stops && cJSON_IsArray(stops)) {
+        int count = cJSON_GetArraySize(stops);
+        if (count > MAX_GRADIENT_STOPS) count = MAX_GRADIENT_STOPS;
+        s->gradient.stop_count = count;
+        for (int i = 0; i < count; i++) {
+            cJSON *st = cJSON_GetArrayItem(stops, i);
+            if (!st) continue;
+            s->gradient.stops[i].offset = parse_float(st, "offset", 0.0f);
+            cJSON *col = cJSON_GetObjectItem(st, "color");
+            if (col && col->valuestring) {
+                char *v = resolve_var(t, col->valuestring);
+                s->gradient.stops[i].color = parse_color(v);
+                free(v);
+            }
+        }
+    }
 }
 
 static WidgetStyle parse_widget_style(cJSON *obj, Theme *t) {
@@ -146,6 +255,41 @@ static WidgetStyle parse_widget_style(cJSON *obj, Theme *t) {
     if (accent && accent->valuestring) { char *v = resolve_var(t, accent->valuestring); s.accent_color = parse_color(v); free(v); }
     s.border_width = parse_int(obj, "border_width", s.border_width);
     s.border_radius = parse_int(obj, "border_radius", s.border_radius);
+
+    s.border_top_width = parse_int(obj, "border_top_width", parse_int(obj, "border_width", 1));
+    s.border_bottom_width = parse_int(obj, "border_bottom_width", parse_int(obj, "border_width", 1));
+    s.border_left_width = parse_int(obj, "border_left_width", parse_int(obj, "border_width", 1));
+    s.border_right_width = parse_int(obj, "border_right_width", parse_int(obj, "border_width", 1));
+
+    cJSON *btc = cJSON_GetObjectItem(obj, "border_top_color");
+    if (btc && btc->valuestring) { char *v = resolve_var(t, btc->valuestring); s.border_top_color = parse_color(v); free(v); }
+    else s.border_top_color = s.border_color;
+    cJSON *bbc = cJSON_GetObjectItem(obj, "border_bottom_color");
+    if (bbc && bbc->valuestring) { char *v = resolve_var(t, bbc->valuestring); s.border_bottom_color = parse_color(v); free(v); }
+    else s.border_bottom_color = s.border_color;
+    cJSON *blc = cJSON_GetObjectItem(obj, "border_left_color");
+    if (blc && blc->valuestring) { char *v = resolve_var(t, blc->valuestring); s.border_left_color = parse_color(v); free(v); }
+    else s.border_left_color = s.border_color;
+    cJSON *brc = cJSON_GetObjectItem(obj, "border_right_color");
+    if (brc && brc->valuestring) { char *v = resolve_var(t, brc->valuestring); s.border_right_color = parse_color(v); free(v); }
+    else s.border_right_color = s.border_color;
+
+    cJSON *bts = cJSON_GetObjectItem(obj, "border_top_style");
+    cJSON *bbs = cJSON_GetObjectItem(obj, "border_bottom_style");
+    cJSON *bls = cJSON_GetObjectItem(obj, "border_left_style");
+    cJSON *brs = cJSON_GetObjectItem(obj, "border_right_style");
+    s.border_top_style = bts && bts->valuestring ? parse_border_style(bts->valuestring) : BORDER_SOLID;
+    s.border_bottom_style = bbs && bbs->valuestring ? parse_border_style(bbs->valuestring) : BORDER_SOLID;
+    s.border_left_style = bls && bls->valuestring ? parse_border_style(bls->valuestring) : BORDER_SOLID;
+    s.border_right_style = brs && brs->valuestring ? parse_border_style(brs->valuestring) : BORDER_SOLID;
+
+    parse_shadow_array(obj, &s, t);
+    parse_gradient(obj, &s, t);
+    s.backdrop_blur = parse_int(obj, "backdrop_blur", 0);
+    s.letter_spacing = parse_float(obj, "letter_spacing", 0.0f);
+    s.line_height = parse_float(obj, "line_height", 1.2f);
+    s.text_transform = parse_int(obj, "text_transform", 0);
+
     cJSON *pad = cJSON_GetObjectItem(obj, "padding");
     if (pad && pad->type == cJSON_Array && cJSON_GetArraySize(pad) >= 4) {
         s.padding[0] = cJSON_GetArrayItem(pad, 0)->valueint;
@@ -180,16 +324,9 @@ static WidgetStyle parse_widget_style(cJSON *obj, Theme *t) {
     cJSON *align = cJSON_GetObjectItem(obj, "text_align");
     if (align && align->valuestring) s.text_align = parse_align(align->valuestring);
     s.opacity = parse_float(obj, "opacity", s.opacity);
-    s.shadow_offset_x = parse_int(obj, "shadow_offset_x", s.shadow_offset_x);
-    s.shadow_offset_y = parse_int(obj, "shadow_offset_y", s.shadow_offset_y);
-    s.shadow_blur = parse_int(obj, "shadow_blur", s.shadow_blur);
-    cJSON *shcol = cJSON_GetObjectItem(obj, "shadow_color");
-    if (shcol && shcol->valuestring) { char *v = resolve_var(t, shcol->valuestring); s.shadow_color = parse_color(v); free(v); }
-    s.bg_gradient = parse_bool(obj, "bg_gradient", s.bg_gradient);
-    cJSON *gradto = cJSON_GetObjectItem(obj, "bg_gradient_to");
-    if (gradto && gradto->valuestring) { char *v = resolve_var(t, gradto->valuestring); s.bg_gradient_to = parse_color(v); free(v); }
-    s.bg_gradient_direction = parse_int(obj, "bg_gradient_direction", s.bg_gradient_direction);
     s.transition_ms = parse_int(obj, "transition_ms", s.transition_ms);
+    cJSON *cursor = cJSON_GetObjectItem(obj, "cursor");
+    if (cursor && cursor->valuestring) s.cursor_style = parse_cursor_style(cursor->valuestring);
     return s;
 }
 
@@ -200,6 +337,18 @@ static void merge_style(WidgetStyle *dst, WidgetStyle *src) {
     dst->accent_color = src->accent_color;
     if (src->border_width != 1) dst->border_width = src->border_width;
     if (src->border_radius != 4) dst->border_radius = src->border_radius;
+    if (src->border_top_width != 1) dst->border_top_width = src->border_top_width;
+    if (src->border_bottom_width != 1) dst->border_bottom_width = src->border_bottom_width;
+    if (src->border_left_width != 1) dst->border_left_width = src->border_left_width;
+    if (src->border_right_width != 1) dst->border_right_width = src->border_right_width;
+    if (src->border_top_color != 0) dst->border_top_color = src->border_top_color;
+    if (src->border_bottom_color != 0) dst->border_bottom_color = src->border_bottom_color;
+    if (src->border_left_color != 0) dst->border_left_color = src->border_left_color;
+    if (src->border_right_color != 0) dst->border_right_color = src->border_right_color;
+    if (src->border_top_style != BORDER_SOLID) dst->border_top_style = src->border_top_style;
+    if (src->border_bottom_style != BORDER_SOLID) dst->border_bottom_style = src->border_bottom_style;
+    if (src->border_left_style != BORDER_SOLID) dst->border_left_style = src->border_left_style;
+    if (src->border_right_style != BORDER_SOLID) dst->border_right_style = src->border_right_style;
     if (src->padding[0] != 8 || src->padding[1] != 12 || src->padding[2] != 8 || src->padding[3] != 12) {
         dst->padding[0] = src->padding[0]; dst->padding[1] = src->padding[1];
         dst->padding[2] = src->padding[2]; dst->padding[3] = src->padding[3];
@@ -218,18 +367,20 @@ static void merge_style(WidgetStyle *dst, WidgetStyle *src) {
     if (src->font_italic) dst->font_italic = src->font_italic;
     if (src->text_align != ALIGN_LEFT) dst->text_align = src->text_align;
     if (src->opacity != 1.0f) dst->opacity = src->opacity;
-    if (src->shadow_blur != 0) {
-        dst->shadow_offset_x = src->shadow_offset_x;
-        dst->shadow_offset_y = src->shadow_offset_y;
-        dst->shadow_blur = src->shadow_blur;
-        dst->shadow_color = src->shadow_color;
+    if (src->shadow_count > 0) {
+        dst->shadow_count = src->shadow_count;
+        for (int i = 0; i < src->shadow_count; i++)
+            dst->shadows[i] = src->shadows[i];
     }
-    if (src->bg_gradient) {
-        dst->bg_gradient = true;
-        dst->bg_gradient_to = src->bg_gradient_to;
-        dst->bg_gradient_direction = src->bg_gradient_direction;
+    if (src->gradient.type != GRADIENT_NONE) {
+        dst->gradient = src->gradient;
     }
+    if (src->backdrop_blur != 0) dst->backdrop_blur = src->backdrop_blur;
+    if (src->letter_spacing != 0.0f) dst->letter_spacing = src->letter_spacing;
+    if (src->line_height != 1.2f) dst->line_height = src->line_height;
+    if (src->text_transform != 0) dst->text_transform = src->text_transform;
     if (src->transition_ms != 150) dst->transition_ms = src->transition_ms;
+    if (src->cursor_style != CURSOR_DEFAULT) dst->cursor_style = src->cursor_style;
 }
 
 static StyleRule *parse_style_rules(cJSON *widgets_obj, Theme *t) {
